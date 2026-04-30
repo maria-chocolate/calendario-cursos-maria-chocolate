@@ -430,7 +430,7 @@ window.setMonthFilter = function(val){
 
 function populateMonthFilter(){
   // Build list of months from bookings, newest first
-  const months = [...new Set(allBookings.map(b=>{
+  const months = [...new Set(allBookings.filter(b=>b.data).map(b=>{
     const[y,m]=b.data.split('-'); return y+'-'+m;
   }))].sort().reverse();
   const sel=document.getElementById('month-filter');
@@ -454,7 +454,7 @@ function renderList(){
   if(currentMonth){
     filtered=filtered.filter(b=>b.data.startsWith(currentMonth));
   }
-  filtered=[...filtered].sort((a,b)=>a.data.localeCompare(b.data));
+  filtered=[...filtered].filter(b=>b.data).sort((a,b)=>(a.data||'').localeCompare(b.data||''));
   const container=document.getElementById('bookings-list');
   if(!filtered.length){ container.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Nenhuma solicitação</div></div>`; return; }
   container.innerHTML=filtered.map(b=>{
@@ -585,7 +585,7 @@ function renderAdminCal(){
   // events list below calendar
   const active=allBookings.filter(b=>b.status!=='reprovado');
   const evsList=document.getElementById('admin-events-list');
-  const monthEvs=active.filter(b=>{ const[by,bm]=b.data.split('-'); return parseInt(by)===y&&parseInt(bm)-1===m; }).sort((a,b)=>a.data.localeCompare(b.data)||a.horaInicio.localeCompare(b.horaInicio));
+  const monthEvs=active.filter(b=>{ const[by,bm]=b.data.split('-'); return parseInt(by)===y&&parseInt(bm)-1===m; }).sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaInicio||'').localeCompare(b.horaInicio||''));
   evsList.innerHTML=monthEvs.map(b=>`
     <div class="mini-event">
       <div class="me-time">${b.horaInicio}h</div>

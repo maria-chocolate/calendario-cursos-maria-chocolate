@@ -302,7 +302,10 @@ const DUR_RULE_HINT = {
 
 let dur=null, tIni=null, tFim=null;
 let selDates=[], waitD2=false;
-let calCur=new Date(); calCur.setDate(1);
+let calCur=new Date();
+// Open calendar on first available month (respecting 20-day rule)
+const _minDate=new Date(); _minDate.setDate(_minDate.getDate()+20);
+calCur=new Date(_minDate.getFullYear(), _minDate.getMonth(), 1);
 let validPhotos=[];
 let allBookings=[];
 
