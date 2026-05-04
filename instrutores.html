@@ -254,7 +254,7 @@ textarea{resize:vertical;min-height:120px;}
     <div class="success-wrap">
       <div class="success-icon">✓</div>
       <div class="success-title">Solicitação enviada!</div>
-      <p class="success-body">Sua solicitação foi recebida. A data está reservada provisoriamente. Você será notificado por e-mail em até 2 dias úteis após a revisão.</p>
+      <p class="success-body">Sua solicitação foi recebida. A data está reservada provisoriamente. Você será notificado por e-mail em até 5 dias úteis após a revisão.</p>
       <div class="success-details" id="success-details"></div>
       <button class="new-btn" onclick="resetAll()">Fazer nova solicitação</button>
     </div>
@@ -596,6 +596,24 @@ function validate(){
 
 window.submitForm = async function(){
   if(!validate()){ document.querySelector('.field-err')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+
+  // Check monthly limit: max 5 courses per instructor per month
+  const instructorEmail = document.getElementById('f-email').value.trim().toLowerCase();
+  const [bookYear, bookMonth] = selDates[0].split('-');
+  const monthKey = bookYear + '-' + bookMonth;
+  const monthlyCount = allBookings.filter(b =>
+    b.email && b.email.toLowerCase() === instructorEmail &&
+    b.status !== 'reprovado' &&
+    b.data && b.data.startsWith(monthKey)
+  ).length;
+
+  if(monthlyCount >= 5){
+    const [y,m] = monthKey.split('-');
+    const monthName = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'][parseInt(m)-1];
+    alert('Você já possui 5 cursos agendados em ' + monthName + ' de ' + y + '.\nEste é o limite máximo permitido por instrutor por mês.');
+    return;
+  }
+
   showLoading('Enviando fotos...');
   try {
     // Upload all photos to Cloudinary
