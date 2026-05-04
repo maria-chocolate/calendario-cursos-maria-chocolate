@@ -158,9 +158,10 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
     <div class="login-logo">M</div>
     <div class="login-title">Maria Chocolate</div>
     <div class="login-sub">Painel administrativo — acesso restrito</div>
+    <input class="login-input" type="email" id="login-email" placeholder="seu@email.com" style="margin-bottom:8px;letter-spacing:normal" onkeydown="if(event.key==='Enter')tryLogin()" />
     <input class="login-input" type="password" id="login-pwd" placeholder="••••••••" onkeydown="if(event.key==='Enter')tryLogin()" />
     <button class="login-btn" onclick="tryLogin()">Entrar</button>
-    <div class="login-err" id="login-err">Senha incorreta. Tente novamente.</div>
+    <div class="login-err" id="login-err">E-mail ou senha incorretos. Tente novamente.</div>
   </div>
 </div>
 
@@ -277,6 +278,7 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
 import { getFirestore, collection, getDocs, doc, updateDoc, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDh1zpRlewDqMnhYlG0SejCXYQLCEwrV8M",
@@ -287,9 +289,10 @@ const firebaseConfig = {
   appId: "1:31696733:web:eb697d1a4ec0875ebfaab4"
 };
 
-const ADMIN_PWD_HASH = 'ddd76a752b6c093f1bcc9cf9c83b1b53b19c108495dfaa40e9079ff5695c7312';
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+
+const app  = initializeApp(firebaseConfig);
+const db   = getFirestore(app);
+const auth = getAuth(app);
 
 const MONTHS_PT=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const WD=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -299,29 +302,36 @@ let blockedDates=[];
 let currentFilter='pendente';
 let adminCur=new Date(); adminCur.setDate(1);
 
-// ── AUTH ───────────────────────────────────────────────────────────────
-async function hashStr(s){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)); return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join(''); }
-
+// ── FIREBASE AUTH ─────────────────────────────────────────────────────
 window.tryLogin = async function(){
-  const pwd=document.getElementById('login-pwd').value;
-  const hash=await hashStr(pwd);
-  if(hash===ADMIN_PWD_HASH){
-    sessionStorage.setItem('mc_auth','1');
-    document.getElementById('login-overlay').style.display='none';
-    document.getElementById('login-err').classList.remove('show');
-    await loadData();
-  } else {
-    document.getElementById('login-err').classList.add('show');
+  const email = document.getElementById('login-email').value.trim();
+  const pwd   = document.getElementById('login-pwd').value;
+  const err   = document.getElementById('login-err');
+  err.classList.remove('show');
+  try {
+    await signInWithEmailAndPassword(auth, email, pwd);
+  } catch(e) {
+    err.classList.add('show');
     document.getElementById('login-pwd').value='';
     document.getElementById('login-pwd').focus();
   }
 }
 
-window.logout = function(){
-  sessionStorage.removeItem('mc_auth');
-  document.getElementById('login-pwd').value='';
-  document.getElementById('login-overlay').style.display='flex';
+window.logout = async function(){
+  await signOut(auth);
 }
+
+onAuthStateChanged(auth, async (user) => {
+  if(user){
+    document.getElementById('login-overlay').style.display='none';
+    document.getElementById('login-email').value='';
+    document.getElementById('login-pwd').value='';
+    await loadData();
+  } else {
+    document.getElementById('login-overlay').style.display='flex';
+  }
+});
+
 
 // ── DATA ───────────────────────────────────────────────────────────────
 window.loadData = async function(){
@@ -701,10 +711,7 @@ function renderReleasedList(){
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────
-if(sessionStorage.getItem('mc_auth')==='1'){
-  document.getElementById('login-overlay').style.display='none';
-  loadData();
-}
+// Auth state handled by onAuthStateChanged above
 </script>
 </body>
 </html>
