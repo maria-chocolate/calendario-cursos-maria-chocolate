@@ -1,12 +1,14 @@
 # 🍫 Calendário de Cursos — Maria Chocolate
 
-> Sistema de agendamento de cursos para instrutores, com painel administrativo de aprovação, notificações por e-mail e armazenamento em nuvem.
+> Sistema de agendamento de cursos presenciais para instrutores, com painel administrativo de aprovação, notificações por e-mail e armazenamento em nuvem.
 
 ---
 
 ## 📋 Visão Geral
 
 Este projeto é uma aplicação web completa para gerenciar o agendamento de datas de cursos ministrados por instrutores parceiros da **Maria Chocolate**. O sistema permite que instrutores solicitem datas diretamente pelo calendário, enquanto a equipe administrativa revisa, aprova ou reprova cada solicitação — tudo com notificações automáticas por e-mail.
+
+> ⚠️ Este calendário é exclusivo para **cursos presenciais**. Lives, aulas show e degustações continuam sendo agendadas pelo WhatsApp.
 
 ---
 
@@ -15,25 +17,26 @@ Este projeto é uma aplicação web completa para gerenciar o agendamento de dat
 ### Portal do Instrutor (`instrutores.html`)
 - Calendário visual com disponibilidade em tempo real
 - Seleção de período: **manhã**, **tarde**, **dia inteiro** ou **2 dias consecutivos**
-- Regras automáticas por dia da semana (ex: tarde apenas seg–sex)
+- Regras automáticas por dia da semana (segundas de manhã bloqueadas para lives)
 - Prazo mínimo de **20 dias** para agendamento
-- Bloqueio visual de datas já reservadas com indicação de status:
+- Limite de **5 cursos por instrutor por mês**
+- Bloqueio visual de datas com indicação de status:
   - 🟠 Laranja — pendente de aprovação
   - 🟢 Verde — confirmado
   - 🔴 Vermelho — data bloqueada pelo admin
 - Upload de **2 a 5 fotos** de divulgação com validação de resolução mínima (1080×1080 px)
-- Descrição do curso com mínimo de 500 caracteres
+- Descrição do curso com mínimo de **500 caracteres**
 - Notificação automática por e-mail ao enviar solicitação
 
 ### Painel Administrativo (`admin.html`)
-- Acesso protegido por senha
-- Listagem de solicitações com filtros por status e categoria
-- Filtro por mês para fácil navegação
+- Acesso protegido por **autenticação Firebase** (e-mail + senha)
+- Listagem de solicitações com filtros por status, categoria e mês
 - Aprovação e reprovação com e-mail automático para o instrutor
 - Cancelamento de aprovações com liberação imediata da data
-- Galeria de fotos por solicitação com download individual ou em lote
+- Galeria de fotos com download individual ou em lote
+- **Exportação de planilha CSV** com os cursos aprovados do mês
 - Calendário visual idêntico ao do instrutor para visão geral do mês
-- Bloqueio de datas específicas (feriados, eventos)
+- Bloqueio de datas específicas (feriados, eventos) — salvo no Firestore
 - Liberação antecipada de datas dentro do prazo de 20 dias
 
 ---
@@ -44,6 +47,7 @@ Este projeto é uma aplicação web completa para gerenciar o agendamento de dat
 |---|---|
 | **HTML / CSS / JavaScript** | Interface completa sem frameworks |
 | **Firebase Firestore** | Banco de dados em tempo real |
+| **Firebase Authentication** | Autenticação segura do painel admin |
 | **Cloudinary** | Armazenamento e entrega de imagens |
 | **EmailJS** | Envio de e-mails automáticos sem backend |
 | **GitHub Pages** | Hospedagem estática gratuita |
@@ -54,30 +58,45 @@ Este projeto é uma aplicação web completa para gerenciar o agendamento de dat
 
 ```
 calendario-cursos-maria-chocolate/
-├── instrutores.html     # Portal de agendamento para instrutores
-├── admin.html           # Painel administrativo
-├── logo.png             # Logomarca Maria Chocolate
-└── README.md            # Este arquivo
+├── instrutores.html     Portal de agendamento para instrutores
+├── admin.html           Painel administrativo
+├── logo.png             Logomarca Maria Chocolate
+└── README.md            Este arquivo
 ```
 
 ---
 
 ## ⚙️ Configuração e Deploy
 
-### Pré-requisitos
-- Conta no [Firebase](https://console.firebase.google.com)
-- Conta no [Cloudinary](https://cloudinary.com)
-- Conta no [EmailJS](https://emailjs.com)
-- Repositório no GitHub com GitHub Pages ativo
-
-### 1. Firebase (Firestore)
+### 1. Firebase (Firestore + Authentication)
 1. Crie um projeto no Firebase Console
 2. Ative o **Firestore Database** na região `southamerica-east1`
-3. Crie as seguintes coleções:
-   - `agendamentos`
-   - `datas_bloqueadas`
-   - `datas_liberadas`
-4. Registre um app web e copie as credenciais para `instrutores.html` e `admin.html`
+3. Crie as coleções: `agendamentos`, `datas_bloqueadas`, `datas_liberadas`
+4. Ative o **Authentication → E-mail/senha** e cadastre o usuário admin
+5. Configure as **regras de segurança do Firestore**:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /agendamentos/{id} {
+      allow create: if true;
+      allow read: if true;
+      allow update, delete: if request.auth != null;
+    }
+    match /datas_bloqueadas/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /datas_liberadas/{id} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
+```
+
+6. Registre um app web e copie as credenciais para os arquivos HTML
 
 ### 2. Cloudinary
 1. Crie uma conta no Cloudinary
@@ -85,31 +104,28 @@ calendario-cursos-maria-chocolate/
    - **Nome:** `maria_chocolate_unsigned`
    - **Signing mode:** `Unsigned`
    - **Pasta:** `maria-chocolate`
-3. Atualize `CLOUDINARY_CLOUD` em `instrutores.html`
+3. Restrinja a chave de API ao domínio do GitHub Pages
+4. Atualize `CLOUDINARY_CLOUD` em `instrutores.html`
 
 ### 3. EmailJS
 1. Crie uma conta no EmailJS e conecte seu Gmail
-2. Crie 2 templates:
-   - **Template 1** (`template_XXXXX`) — Notificação de nova solicitação para o admin
-   - **Template 2** (`template_XXXXX`) — Resultado (aprovação/reprovação) para o instrutor
+2. Crie 2 templates: notificação para admin e resultado para instrutor
 3. Atualize `service_id`, `template_id` e `public_key` nos arquivos HTML
 
 ### 4. GitHub Pages
 1. Suba os arquivos `instrutores.html`, `admin.html` e `logo.png` no repositório
-2. Vá em **Settings → Pages**
-3. Selecione a branch `main` e pasta `/ (root)`
-4. Acesse via:
-   - `https://usuario.github.io/calendario-cursos-maria-chocolate/instrutores.html`
-   - `https://usuario.github.io/calendario-cursos-maria-chocolate/admin.html`
+2. Vá em **Settings → Pages**, selecione branch `main` e pasta `/ (root)`
+3. Acesse via `https://usuario.github.io/calendario-cursos-maria-chocolate/`
 
 ---
 
 ## 🔐 Segurança
 
-- O painel administrativo é protegido por senha com hash **SHA-256** verificado no navegador
-- As credenciais de API ficam no lado do cliente — recomenda-se configurar **regras de segurança no Firestore** para restringir escrita/leitura conforme o uso
-- O upload preset do Cloudinary é `unsigned` com pasta restrita
-- A senha do admin pode ser alterada gerando um novo hash SHA-256 e atualizando a constante `ADMIN_PWD_HASH` no `admin.html`
+- Painel admin protegido por **Firebase Authentication** (e-mail + senha)
+- Regras do Firestore garantem que apenas usuários autenticados modificam dados
+- Upload preset do Cloudinary é `unsigned` com pasta restrita
+- Restrinja a `apiKey` do Firebase ao domínio do GitHub Pages no Google Cloud Console
+- Nunca compartilhe as credenciais do Firebase, Cloudinary ou EmailJS publicamente
 
 ---
 
@@ -117,12 +133,12 @@ calendario-cursos-maria-chocolate/
 
 | Período | Horário | Dias disponíveis |
 |---|---|---|
-| Somente manhã | 09h às 11h30 | Segunda a Sábado |
+| Somente manhã | 09h às 12h30 | Terça a Sábado |
 | Somente tarde | 13h30 às 17h | Segunda a Sexta |
 | Dia inteiro | 09h às 17h | Segunda a Sexta |
 | 2 dias consecutivos | 09h às 17h | 1º dia: Segunda a Quinta |
 
-> O prazo mínimo para agendamento é de **20 dias** a partir da data atual. O admin pode liberar datas antecipadas de forma excepcional.
+> ⚠️ Segundas-feiras de manhã sempre bloqueadas (lives) · Prazo mínimo: 20 dias · Limite: 5 cursos/mês por instrutor · É possível agendar manhã e tarde no mesmo dia em solicitações separadas · Cursos de fornecedores: 2h30 de duração
 
 ---
 
@@ -133,44 +149,36 @@ Instrutor envia solicitação
         ↓
 Admin recebe e-mail com os dados do curso
         ↓
-Admin aprova ou reprova no painel
+Admin aprova ou reprova no painel (prazo: 5 dias úteis)
         ↓
 Instrutor recebe e-mail com o resultado
 ```
 
----
-
-## 🗂️ Categorias de Cursos
-
-- 🍫 Chocolateria
-- 🎂 Confeitaria
-- 🥐 Salgados
-- 🏪 Fornecedor
+> Se aprovado, o instrutor deve chegar com **1 hora de antecedência** para organizar a sala.
 
 ---
 
-## 📸 Requisitos para Fotos de Divulgação
+## 🗂️ Categorias · 📸 Fotos de Divulgação
 
-- Formato: **JPG ou PNG**
-- Resolução mínima: **1080 × 1080 px**
-- Quantidade: **mínimo 2, máximo 5 fotos** por solicitação
+**Categorias:** 🍫 Chocolateria · 🎂 Confeitaria · 🥐 Salgados · 🏪 Fornecedor
+
+**Fotos:** Formato JPG ou PNG · Resolução mínima 1080×1080 px · Mínimo 2, máximo 5 fotos por solicitação
 
 ---
 
-## 🚀 Roadmap Futuro
+## ⚠️ Limitações dos Planos Gratuitos
 
-- [ ] Autenticação de instrutores com login individual
-- [ ] Notificações push no navegador
-- [ ] Exportação do calendário para Google Calendar
-- [ ] Relatórios mensais em PDF
-- [ ] Página pública de visualização dos cursos confirmados
+| Plataforma | Limite | Impacto |
+|---|---|---|
+| **🔥 Firebase Firestore** | 1 GB · 50k leituras/dia · 20k escritas/dia | Suficiente para centenas de agendamentos |
+| **🖼️ Cloudinary** | ~10 GB · 25 créditos mensais | 12 instrutores × 2 cursos ≈ 240 MB/mês |
+| **📧 EmailJS** | 200 e-mails/mês · 2 templates | ~48 e-mails/mês estimados |
+| **🐙 GitHub Pages** | 1 GB repositório · 100 GB banda/mês | Sem impacto |
 
 ---
 
 ## 👩‍💼 Sobre
 
-Desenvolvido para **Maria Chocolate** — *Ensinar, criar, celebrar.*
+Desenvolvido por **Heberth Augusto** para **Maria Chocolate** utilizando a **Claude IA**.
 
----
-
-*Projeto mantido pela equipe Maria Chocolate.*
+*Ensinar, criar, celebrar.*
