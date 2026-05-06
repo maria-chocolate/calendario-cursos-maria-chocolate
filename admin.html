@@ -182,6 +182,7 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
   <div class="page-header">
     <h1 class="page-title">Solicitações de agendamento</h1>
     <button class="filter-btn" onclick="loadData()" style="border-color:var(--caramel);color:var(--caramel)">↻ Atualizar</button>
+    <button class="filter-btn" onclick="exportMonth()" style="border-color:var(--green);color:var(--green)" id="btn-export">⬇ Exportar mês</button>
   </div>
 
 
@@ -273,7 +274,7 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
 
 <!-- EMAILJS -->
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
-<script>emailjs.init('Oxq-RQMK4f58cZ9UF');</script>
+<script>emailjs.init('Mt-ZQuddRufNWIGDx');</script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
@@ -364,10 +365,10 @@ window.updateStatus = async function(id, status){
         ? '✅ Sua solicitação foi APROVADA! Sua data está confirmada no calendário.'
         : '❌ Sua solicitação foi REPROVADA. A data não está disponível para o período solicitado.';
       const instrucoes = isApproved
-        ? 'Por favor chegue com 30 minutos de antecedência no dia do curso. Em caso de dúvidas, entre em contato pelo e-mail compras.mariachocolate@gmail.com.'
-        : 'Você pode acessar o calendário e escolher outra data disponível. Em caso de dúvidas, entre em contato pelo e-mail compras.mariachocolate@gmail.com.';
+        ? 'Por favor chegue com 1 hora de antecedência no dia do curso para organizar a sala de aula. Em caso de dúvidas, entre em contato pelo e-mail escolamariachoc@gmail.com.'
+        : 'Você pode acessar o calendário e escolher outra data disponível. Em caso de dúvidas, entre em contato pelo e-mail escolamariachoc@gmail.com.';
       try {
-        await emailjs.send('service_cmptmbu', 'template_d67s04f', {
+        await emailjs.send('service_apewrrg', 'template_3w66i98', {
           to_email: b.email,
           email_instrutor: b.email,
           nome: b.nome,
@@ -398,7 +399,7 @@ window.cancelApproval = async function(id){
       // Notify instructor
       let dateText=fmtLong(b.data); if(b.data2) dateText+=' e '+fmtLong(b.data2);
       try {
-        await emailjs.send('service_cmptmbu','template_d67s04f',{
+        await emailjs.send('service_apewrrg','template_3w66i98',{
           nome: b.nome,
           email_instrutor: b.email,
           titulo: b.titulo,
@@ -408,7 +409,7 @@ window.cancelApproval = async function(id){
           valor: b.valor.toFixed(2),
           resultado: 'cancelada',
           mensagem_resultado: '❌ Sua data confirmada foi cancelada pelo administrador. A data foi liberada no calendário.',
-          instrucoes: 'Você pode acessar o calendário e escolher uma nova data. Em caso de dúvidas, entre em contato pelo e-mail compras.mariachocolate@gmail.com.',
+          instrucoes: 'Você pode acessar o calendário e escolher uma nova data. Em caso de dúvidas, entre em contato pelo e-mail escolamariachoc@gmail.com.',
         });
       } catch(e){ console.warn('Erro ao enviar e-mail:', e); }
     }
@@ -661,8 +662,7 @@ function renderBlockedList(){
   const el=document.getElementById('blocked-list');
   if(!sorted.length){ el.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Nenhuma data bloqueada.</span>'; return; }
   el.innerHTML=sorted.map(b=>
-    `<div class="blocked-tag">🚫 ${b.label}${b.reason?' — '+b.reason:''}
-    <button onclick="removeBlockedDate('${b.id}')" title="Remover bloqueio">✕</button></div>`
+    `<div class="blocked-tag">🚫 ${b.label}${b.reason?' — '+b.reason:''} <button onclick="removeBlockedDate('${b.id}')" title="Remover bloqueio">✕</button></div>`
   ).join('');
 }
 
@@ -705,9 +705,66 @@ function renderReleasedList(){
   const el=document.getElementById('released-list');
   if(!sorted.length){ el.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Nenhuma data liberada antecipadamente.</span>'; return; }
   el.innerHTML=sorted.map(b=>
-    `<div class="release-tag">✅ ${b.label}${b.reason?' — '+b.reason:''}
-    <button onclick="removeReleasedDate('${b.id}')" title="Remover liberação">✕</button></div>`
+    `<div class="release-tag">✅ ${b.label}${b.reason?' — '+b.reason:''} <button onclick="removeReleasedDate('${b.id}')" title="Remover liberação">✕</button></div>`
   ).join('');
+}
+
+// ── EXPORT SPREADSHEET ────────────────────────────────────────────────
+window.exportMonth = function(){
+  // Get current month from filter or use current month
+  const now = new Date();
+  const targetMonth = currentMonth || (now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+  const [y,m] = targetMonth.split('-');
+  const monthLabel = MONTHS_PT[parseInt(m)-1]+' '+y;
+
+  const data = allBookings
+    .filter(b => b.data && b.data.startsWith(targetMonth) && b.status === 'aprovado')
+    .sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaInicio||'').localeCompare(b.horaInicio||''));
+
+  if(!data.length){
+    alert('Nenhum curso aprovado em ' + monthLabel + '.');
+    return;
+  }
+
+  // Build CSV with BOM for Excel UTF-8 support
+  const BOM = '﻿';
+  const headers = ['Data','Dia da Semana','Horário Início','Horário Fim','Período','Instrutor','E-mail','Título do Curso','Categoria','Valor (R$)','Status'];
+  const WD_FULL = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
+  const durLabel = {manha:'Manhã',tarde:'Tarde',dia:'Dia inteiro','2dias':'2 dias inteiros'};
+
+  const rows = data.map(b => {
+    const[by,bm,bd] = b.data.split('-').map(Number);
+    const wd = WD_FULL[new Date(by,bm-1,bd).getDay()];
+    const dateStr = bd+'/'+bm+'/'+by;
+    const val = typeof b.valor === 'number' ? b.valor.toFixed(2).replace('.',',') : '';
+    return [
+      dateStr,
+      wd,
+      b.horaInicio||'',
+      b.horaFim||'',
+      durLabel[b.duracao]||b.duracao||'',
+      b.nome||'',
+      b.email||'',
+      b.titulo||'',
+      b.categoria||'',
+      val,
+      'Aprovado'
+    ].map(v => '"'+String(v).replace(/"/g,'""')+'"').join(';');
+  });
+
+  // Add summary row
+  const totalVal = data.reduce((s,b)=>s+(typeof b.valor==='number'?b.valor:0),0);
+  rows.push(''); // empty line
+  rows.push('"Total de cursos:";'+data.length+';"Valor total:";"R$ '+totalVal.toFixed(2).replace('.',',')+'"');
+
+  const csv = BOM + headers.map(h=>'"'+h+'"').join(';') + '\n' + rows.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'cursos_aprovados_'+monthLabel.replace(' ','_')+'.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── INIT ───────────────────────────────────────────────────────────────
