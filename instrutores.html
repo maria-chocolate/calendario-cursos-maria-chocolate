@@ -296,8 +296,8 @@ const DUR_CONFIG = {
 const DUR_RULE_HINT = {
   manha:   '📅 Manhã: disponível de terça-feira a sábado (segundas reservadas para lives)',
   tarde:   '📅 Tarde: disponível apenas de segunda-feira a sexta-feira',
-  dia:     '📅 Dia inteiro: disponível apenas de segunda-feira a sexta-feira',
-  '2dias': '📅 2 dias consecutivos: o 1º dia deve ser de segunda-feira a quinta-feira',
+  dia:     '📅 Dia inteiro: disponível apenas de terça-feira a sexta-feira',
+  '2dias': '📅 2 dias consecutivos: o 1º dia deve ser de terça-feira a quinta-feira',
 };
 
 let dur=null, tIni=null, tFim=null;
@@ -379,11 +379,12 @@ function getDayStatus(ds){
 function isPeriodAllowed(ds, period){
   const wd=getWeekday(ds);
   if(wd===0) return false; // domingo nunca
-  // Block Monday morning (lives every Monday morning)
-  if(period==='manha')  return wd>=2&&wd<=6; // ter-sab (seg bloqueada para lives)
+  // Monday: only afternoon allowed (morning reserved for lives)
+  // Therefore full day and 2-day courses cannot start on Monday
+  if(period==='manha')  return wd>=2&&wd<=6; // ter-sab
   if(period==='tarde')  return wd>=1&&wd<=5; // seg-sex
-  if(period==='dia')    return wd>=1&&wd<=5; // seg-sex
-  if(period==='2dias')  return wd>=1&&wd<=4; // seg-qui
+  if(period==='dia')    return wd>=2&&wd<=5; // ter-sex (seg bloqueada pois manhã indisponível)
+  if(period==='2dias')  return wd>=2&&wd<=4; // ter-qui (seg bloqueada pois manhã indisponível)
   return false;
 }
 
