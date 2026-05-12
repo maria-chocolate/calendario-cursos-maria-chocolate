@@ -587,10 +587,13 @@ function renderAdminCal(){
     }
     // availability labels
     const isSaturday = new Date(y,m,d).getDay() === 6;
+    const isMonday   = new Date(y,m,d).getDay() === 1;
     let availHtml='';
     if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
       availHtml='<div class="day-avail">';
-      availHtml+=!amBooked?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      // Never show "manhã" on Mondays — morning reserved for lives
+      availHtml+=(!amBooked && !isMonday)?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      // Never show "tarde" on Saturdays — afternoon not available
       availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
     }

@@ -435,10 +435,12 @@ function renderCal(){
     // Availability labels: show free periods when one is booked but not full day
     let availHtml='';
     const isSaturday = getWeekday(ds) === 6;
+    const isMonday   = getWeekday(ds) === 1;
     if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
       availHtml='<div class="day-avail">';
-      availHtml+=!amBooked?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
-      // Never show "tarde" on Saturdays — afternoon is not available that day
+      // Never show "manhã" on Mondays — morning reserved for lives
+      availHtml+=(!amBooked && !isMonday)?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      // Never show "tarde" on Saturdays — afternoon not available
       availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
     }
