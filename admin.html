@@ -350,6 +350,11 @@ window.loadData = async function(){
 }
 
 window.updateStatus = async function(id, status){
+  const b = allBookings.find(x=>x.id===id);
+  const acao = status === 'aprovado' ? 'APROVAR' : 'REPROVAR';
+  const emoji = status === 'aprovado' ? '✅' : '❌';
+  const msg = b ? emoji+' Deseja '+acao+' o curso:\n"'+b.titulo+'"?' : emoji+' Deseja '+acao+' esta solicitação?';
+  if(!confirm(msg)) return;
   try {
     await updateDoc(doc(db,'agendamentos',id),{status});
     const idx=allBookings.findIndex(b=>b.id===id);
@@ -519,8 +524,8 @@ window.showDetail = function(id){
     <div class="detail-row"><div class="detail-key">Fotos (${fotos.length})</div><div class="detail-val">${photosHtml}</div></div>
     <div class="modal-actions">
       ${b.status==='pendente'
-        ? `<button class="act-btn act-approve" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','aprovado');closeModal()">Aprovar</button>
-           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','reprovado');closeModal()">Reprovar</button>`
+        ? `<button class="act-btn act-approve" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','aprovado').then(()=>closeModal())">Aprovar</button>
+           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','reprovado').then(()=>closeModal())">Reprovar</button>`
         : b.status==='aprovado'
           ? `<button class="act-btn act-cancel" style="padding:8px 18px;font-size:13px" onclick="cancelApproval('${b.id}');closeModal()">Cancelar aprovação e liberar data</button>`
           : ''
@@ -581,11 +586,12 @@ function renderAdminCal(){
       else if(hasApproved) cls+=' has-approved';
     }
     // availability labels
+    const isSaturday = new Date(y,m,d).getDay() === 6;
     let availHtml='';
     if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
       availHtml='<div class="day-avail">';
       availHtml+=!amBooked?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
-      availHtml+=!pmBooked?'<div class="avail-label avail-tarde">tarde</div>':'';
+      availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
     }
     const blockedEntry=getBlockedDates().find(b=>b.date===ds);
