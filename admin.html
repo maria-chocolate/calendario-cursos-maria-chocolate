@@ -63,6 +63,19 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
 .empty-state{padding:4rem 2rem;text-align:center;color:var(--text-muted);}
 .empty-icon{font-size:40px;margin-bottom:1rem;opacity:.4;}
 .empty-title{font-size:16px;font-weight:500;margin-bottom:4px;color:var(--text);}
+/* REJECT REASON MODAL */
+.reject-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:200;padding:1.5rem;}
+.reject-overlay.open{display:flex;}
+.reject-box{background:white;border-radius:var(--radius);padding:1.75rem;max-width:480px;width:100%;}
+.reject-title{font-family:'Cormorant Garamond',serif;font-size:20px;color:var(--chocolate);margin-bottom:.5rem;}
+.reject-subtitle{font-size:13px;color:var(--text-muted);margin-bottom:1rem;}
+.reject-textarea{width:100%;font-family:'DM Sans',sans-serif;font-size:14px;border:0.5px solid var(--border-strong);border-radius:var(--radius-sm);padding:10px 14px;color:var(--text);outline:none;resize:vertical;min-height:100px;transition:border-color .15s;}
+.reject-textarea:focus{border-color:var(--red);}
+.reject-actions{display:flex;gap:10px;margin-top:1rem;justify-content:flex-end;}
+.reject-confirm{background:var(--red);color:white;border:none;border-radius:var(--radius-sm);padding:9px 20px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;}
+.reject-confirm:hover{opacity:.85;}
+.reject-cancel{background:none;border:0.5px solid var(--border-strong);border-radius:var(--radius-sm);padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;color:var(--text-muted);}
+.reject-cancel:hover{background:var(--warm);}
 /* MODAL */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:100;padding:1.5rem;}
 .modal-overlay.open{display:flex;}
@@ -165,6 +178,19 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
     <input class="login-input" type="password" id="login-pwd" placeholder="••••••••" onkeydown="if(event.key==='Enter')tryLogin()" />
     <button class="login-btn" onclick="tryLogin()">Entrar</button>
     <div class="login-err" id="login-err">E-mail ou senha incorretos. Tente novamente.</div>
+  </div>
+</div>
+
+<!-- REJECT REASON MODAL -->
+<div class="reject-overlay" id="reject-overlay">
+  <div class="reject-box">
+    <div class="reject-title">❌ Reprovar solicitação</div>
+    <div class="reject-subtitle" id="reject-subtitle">Informe o motivo da reprovação. Ele será enviado por e-mail ao instrutor.</div>
+    <textarea class="reject-textarea" id="reject-reason" placeholder="Ex: A data solicitada conflita com outro evento já confirmado. Por favor escolha outra data disponível no calendário..."></textarea>
+    <div class="reject-actions">
+      <button class="reject-cancel" onclick="closeRejectModal()">Cancelar</button>
+      <button class="reject-confirm" onclick="confirmReject()">Reprovar e enviar e-mail</button>
+    </div>
   </div>
 </div>
 
@@ -352,26 +378,72 @@ window.loadData = async function(){
   } catch(e){ console.error(e); alert('Erro ao carregar dados: '+e.message); }
 }
 
-window.updateStatus = async function(id, status){
+// ── REJECT MODAL ──────────────────────────────────────────────────────
+let _pendingRejectId = null;
+let _pendingCloseModal = false;
+
+window.updateStatus = async function(id, status, fromModal){
+  if(status === 'reprovado'){
+    // Show rejection reason modal instead of confirm
+    const b = allBookings.find(x=>x.id===id);
+    _pendingRejectId = id;
+    _pendingCloseModal = !!fromModal;
+    document.getElementById('reject-reason').value = '';
+    if(b) document.getElementById('reject-subtitle').textContent =
+      'Motivo da reprovação de "'+b.titulo+'". Será enviado por e-mail ao instrutor.';
+    document.getElementById('reject-overlay').classList.add('open');
+    return;
+  }
+  // Approve flow — keep confirm dialog
   const b = allBookings.find(x=>x.id===id);
-  const acao = status === 'aprovado' ? 'APROVAR' : 'REPROVAR';
-  const emoji = status === 'aprovado' ? '✅' : '❌';
-  const msg = b ? emoji+' Deseja '+acao+' o curso:\n"'+b.titulo+'"?' : emoji+' Deseja '+acao+' esta solicitação?';
+  const msg = b ? '✅ Deseja APROVAR o curso:\n"'+b.titulo+'"?' : '✅ Deseja APROVAR esta solicitação?';
   if(!confirm(msg)) return;
+  await executeStatus(id, 'aprovado', null, fromModal);
+}
+
+window.closeRejectModal = function(){
+  document.getElementById('reject-overlay').classList.remove('open');
+  _pendingRejectId = null;
+}
+
+window.confirmReject = async function(){
+  if(!_pendingRejectId) return;
+  const reason = document.getElementById('reject-reason').value.trim();
+  document.getElementById('reject-overlay').classList.remove('open');
+  await executeStatus(_pendingRejectId, 'reprovado', reason, _pendingCloseModal);
+  _pendingRejectId = null;
+}
+
+async function executeStatus(id, status, rejectReason, closeAfter){
+  const isApproved = status === 'aprovado';
   try {
-    await updateDoc(doc(db,'agendamentos',id),{status});
+    const updateData = {status};
+    if(!isApproved && rejectReason){
+      updateData.motivo_reprovacao = rejectReason;
+      updateData.data_reprovacao = new Date().toLocaleDateString('pt-BR');
+    }
+    await updateDoc(doc(db,'agendamentos',id), updateData);
     const idx=allBookings.findIndex(b=>b.id===id);
-    if(idx>-1) allBookings[idx].status=status;
+    if(idx>-1){
+      allBookings[idx].status=status;
+      if(!isApproved && rejectReason){
+        allBookings[idx].motivo_reprovacao = rejectReason;
+        allBookings[idx].data_reprovacao = new Date().toLocaleDateString('pt-BR');
+      }
+    }
     renderList(); renderAdminCal();
 
     // Send result email to instructor
     const b=allBookings.find(x=>x.id===id);
     if(b && b.email){
       let dateText=fmtLong(b.data); if(b.data2) dateText+=' e '+fmtLong(b.data2);
-      const isApproved = status==='aprovado';
+      // isApproved already declared above
       const mensagem_resultado = isApproved
         ? '✅ Sua solicitação foi APROVADA! Sua data está confirmada no calendário.'
-        : '❌ Sua solicitação foi REPROVADA. A data não está disponível para o período solicitado.';
+        : '❌ Sua solicitação foi REPROVADA.';
+      const motivo = (!isApproved && rejectReason)
+        ? 'Motivo: '+rejectReason
+        : '';
       const instrucoes = isApproved
         ? 'Por favor chegue com 1 hora de antecedência no dia do curso para organizar a sala de aula. Em caso de dúvidas, entre em contato pelo e-mail escolamariachoc@gmail.com.'
         : 'Você pode acessar o calendário e escolher outra data disponível. Em caso de dúvidas, entre em contato pelo e-mail escolamariachoc@gmail.com.';
@@ -387,11 +459,13 @@ window.updateStatus = async function(id, status){
           valor: b.valor.toFixed(2),
           resultado: isApproved ? 'aprovada' : 'reprovada',
           mensagem_resultado,
+          motivo,
           instrucoes,
         });
         console.log('E-mail enviado para:', b.email);
       } catch(emailErr){ console.warn('Erro ao enviar e-mail de resultado:', emailErr); }
     }
+    if(closeAfter) closeModal();
   } catch(e){ alert('Erro ao atualizar: '+e.message); }
 }
 
@@ -486,7 +560,7 @@ function renderList(){
       <div style="font-size:13px;font-weight:500">R$ ${b.valor.toFixed(2)}</div>
       <div class="actions">
         ${b.status==='pendente'
-          ? `<button class="act-btn act-approve" onclick="updateStatus('${b.id}','aprovado')">Aprovar</button><button class="act-btn act-reject" onclick="updateStatus('${b.id}','reprovado')">Reprovar</button>`
+          ? `<button class="act-btn act-approve" onclick="updateStatus('${b.id}','aprovado')">Aprovar</button><button class="act-btn act-reject" onclick="updateStatus('${b.id}','reprovado',false)">Reprovar</button>`
           : b.status==='aprovado'
             ? `<span class="status-badge st-aprovado">Aprovado</span><button class="act-btn act-cancel" onclick="cancelApproval('${b.id}')" title="Cancelar aprovação e liberar data">Cancelar</button>`
             : `<span class="status-badge st-reprovado">Reprovado</span>`
@@ -524,11 +598,12 @@ window.showDetail = function(id){
     <div class="detail-row"><div class="detail-key">Valor</div><div class="detail-val">R$ ${b.valor.toFixed(2)}</div></div>
     <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></div></div>
     <div class="detail-row"><div class="detail-key">Descrição</div><div class="detail-val" style="white-space:pre-wrap">${b.descricao}</div></div>
+    ${b.motivo_reprovacao ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao}<br><span style="font-size:11px;color:var(--text-muted)">${b.data_reprovacao||''}</span></div></div>` : ''}
     <div class="detail-row"><div class="detail-key">Fotos (${fotos.length})</div><div class="detail-val">${photosHtml}</div></div>
     <div class="modal-actions">
       ${b.status==='pendente'
         ? `<button class="act-btn act-approve" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','aprovado').then(()=>closeModal())">Aprovar</button>
-           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','reprovado').then(()=>closeModal())">Reprovar</button>`
+           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','reprovado',true)">Reprovar</button>`
         : b.status==='aprovado'
           ? `<button class="act-btn act-cancel" style="padding:8px 18px;font-size:13px" onclick="cancelApproval('${b.id}');closeModal()">Cancelar aprovação e liberar data</button>`
           : ''
