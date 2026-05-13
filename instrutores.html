@@ -334,18 +334,40 @@ async function loadBookings(){
 function getB(){ return allBookings.filter(b=>b.status!=='reprovado'); }
 
 // ── CLOUDINARY ─────────────────────────────────────────────────────────
-async function uploadPhoto(file){
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('upload_preset', CLOUDINARY_PRESET);
-  fd.append('folder', 'maria-chocolate');
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {method:'POST', body:fd});
-  if(!res.ok){
-    const err = await res.json().catch(()=>({}));
-    throw new Error('Falha no upload da foto: '+(err.error?.message||res.status));
+async function uploadPhoto(file, attempt=1){
+  const MAX_ATTEMPTS = 3;
+  const TIMEOUT_MS = 30000; // 30 segundos por foto
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('upload_preset', CLOUDINARY_PRESET);
+    fd.append('folder', 'maria-chocolate');
+
+    // AbortController for timeout
+    const controller = new AbortController();
+    const timer = setTimeout(()=>controller.abort(), TIMEOUT_MS);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, {
+      method:'POST', body:fd, signal:controller.signal
+    });
+    clearTimeout(timer);
+
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      throw new Error('Falha no upload: '+(err.error?.message||res.status));
+    }
+    const data = await res.json();
+    return data.secure_url;
+
+  } catch(e){
+    if(attempt < MAX_ATTEMPTS){
+      // Wait 2s before retrying
+      setLoadingText(`Tentativa ${attempt+1} de ${MAX_ATTEMPTS} para ${file.name}...`);
+      await new Promise(r=>setTimeout(r,2000));
+      return uploadPhoto(file, attempt+1);
+    }
+    throw new Error('Não foi possível enviar a foto "'+file.name+'" após '+MAX_ATTEMPTS+' tentativas. Verifique sua conexão e tente novamente.');
   }
-  const data = await res.json();
-  return data.secure_url;
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────
