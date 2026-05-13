@@ -462,7 +462,7 @@ async function executeStatus(id, status, rejectReason, closeAfter){
           motivo,
           instrucoes,
         });
-        console.log('E-mail enviado para:', b.email);
+        console.log('E-mail enviado para:', b.email, '| Motivo:', motivo||'(aprovado)');
       } catch(emailErr){ console.warn('Erro ao enviar e-mail de resultado:', emailErr); }
     }
     if(closeAfter) closeModal();
@@ -598,7 +598,7 @@ window.showDetail = function(id){
     <div class="detail-row"><div class="detail-key">Valor</div><div class="detail-val">R$ ${b.valor.toFixed(2)}</div></div>
     <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></div></div>
     <div class="detail-row"><div class="detail-key">Descrição</div><div class="detail-val" style="white-space:pre-wrap">${b.descricao}</div></div>
-    ${b.motivo_reprovacao ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao}<br><span style="font-size:11px;color:var(--text-muted)">${b.data_reprovacao||''}</span></div></div>` : ''}
+    ${(b.status==='reprovado') ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao||'<em style="color:var(--text-muted)">Não informado</em>'}<br><span style="font-size:11px;color:var(--text-muted)">${b.data_reprovacao||''}</span></div></div>` : ''}
     <div class="detail-row"><div class="detail-key">Fotos (${fotos.length})</div><div class="detail-val">${photosHtml}</div></div>
     <div class="modal-actions">
       ${b.status==='pendente'
