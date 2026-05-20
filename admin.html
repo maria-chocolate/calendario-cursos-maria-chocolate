@@ -553,7 +553,7 @@ function renderList(){
   container.innerHTML=filtered.map(b=>{
     let dateText=fmtDate(b.data); if(b.data2) dateText+=' – '+fmtDate(b.data2);
     return `<div class="booking-row">
-      <div><div class="curso-title">${b.titulo}</div><div class="curso-instrutor">${b.nome}</div></div>
+      <div><div class="curso-title">${b.titulo}</div><div class="curso-instrutor">${b.nome}</div><div style="font-size:11px;color:var(--text-muted)">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : ''}</div></div>
       <div style="font-size:13px">${dateText}</div>
       <div style="font-size:12px;color:var(--text-muted)">${durLabel(b.duracao)}<br>${b.horaInicio}h–${b.horaFim}h</div>
       <div><span class="cat-badge ${catClass(b.categoria)}">${b.categoria}</span></div>
@@ -597,6 +597,7 @@ window.showDetail = function(id){
     <div class="detail-row"><div class="detail-key">Categoria</div><div class="detail-val">${b.categoria}</div></div>
     <div class="detail-row"><div class="detail-key">Valor</div><div class="detail-val">R$ ${b.valor.toFixed(2)}</div></div>
     <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></div></div>
+    <div class="detail-row"><div class="detail-key">Solicitado em</div><div class="detail-val">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : '—'}</div></div>
     <div class="detail-row"><div class="detail-key">Descrição</div><div class="detail-val" style="white-space:pre-wrap">${b.descricao}</div></div>
     ${(b.status==='reprovado') ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao||'<em style="color:var(--text-muted)">Não informado</em>'}<br><span style="font-size:11px;color:var(--text-muted)">${b.data_reprovacao||''}</span></div></div>` : ''}
     <div class="detail-row"><div class="detail-key">Fotos (${fotos.length})</div><div class="detail-val">${photosHtml}</div></div>

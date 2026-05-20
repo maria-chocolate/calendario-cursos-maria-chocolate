@@ -641,6 +641,33 @@ function validate(){
 window.submitForm = async function(){
   if(!validate()){ document.querySelector('.field-err')?.scrollIntoView({behavior:'smooth',block:'center'}); return; }
 
+  // Real-time conflict check — query Firestore fresh before saving
+  setLoadingText('Verificando disponibilidade...');
+  try {
+    const freshSnap = await getDocs(collection(db,'agendamentos'));
+    const freshBookings = freshSnap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.status!=='reprovado');
+
+    // Check if selected dates are still available
+    const datesToCheck = dur==='2dias' ? [selDates[0], selDates[1]] : [selDates[0]];
+    for(const ds of datesToCheck){
+      const conflicts = freshBookings.filter(b => b.data===ds || (b.data2&&b.data2===ds));
+      for(const conflict of conflicts){
+        if(conflict.duracao==='dia'||conflict.duracao==='2dias'||
+          (conflict.duracao===dur)||(dur==='dia'&&(conflict.duracao==='manha'||conflict.duracao==='tarde'))){
+          hideLoading();
+          alert('⚠️ Ops! Esta data acabou de ser reservada por outro instrutor enquanto você preenchia o formulário.\n\nPor favor volte ao calendário e escolha outra data disponível.');
+          goBackToCal();
+          return;
+        }
+        // Check period conflicts
+        if(dur==='manha' && conflict.duracao==='manha') { hideLoading(); alert('⚠️ O período da manhã nesta data acabou de ser reservado.\n\nEscolha outra data ou período.'); goBackToCal(); return; }
+        if(dur==='tarde' && conflict.duracao==='tarde') { hideLoading(); alert('⚠️ O período da tarde nesta data acabou de ser reservado.\n\nEscolha outra data ou período.'); goBackToCal(); return; }
+      }
+    }
+    // Update local bookings with fresh data
+    allBookings = freshBookings;
+  } catch(e){ console.warn('Erro na verificação em tempo real:', e); }
+
   // Check monthly limit: max 5 courses per instructor per month
   const instructorEmail = document.getElementById('f-email').value.trim().toLowerCase();
   const [bookYear, bookMonth] = selDates[0].split('-');
