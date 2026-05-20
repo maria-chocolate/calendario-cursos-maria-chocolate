@@ -222,11 +222,24 @@ textarea{resize:vertical;min-height:120px;}
     <div class="sec-title">Sobre o curso</div>
     <div class="form-grid">
       <div class="form-group" id="fg-cat"><label>Categoria <span class="req">*</span></label>
-        <select id="f-cat"><option value="">Selecionar...</option><option value="Chocolateria">🍫 Chocolateria</option><option value="Confeitaria">🎂 Confeitaria</option><option value="Salgados">🥐 Salgados</option><option value="Fornecedor">🏪 Fornecedor</option></select>
+        <select id="f-cat" onchange="checkFornecedor()"><option value="">Selecionar...</option><option value="Chocolateria">🍫 Chocolateria</option><option value="Confeitaria">🎂 Confeitaria</option><option value="Salgados">🥐 Salgados</option><option value="Fornecedor">🏪 Fornecedor</option></select>
         <span class="err-msg">Selecione a categoria</span></div>
       <div class="form-group" id="fg-valor"><label>Valor do curso <span class="req">*</span></label>
         <div class="prefix-input"><span>R$</span><input type="number" id="f-valor" placeholder="0,00" min="0" step="0.01" /></div>
         <span class="err-msg">Informe o valor</span></div>
+      <div class="form-group" id="fg-tipo"><label>Tipo de curso <span class="req">*</span></label>
+        <select id="f-tipo" onchange="checkFornecedor()">
+          <option value="">Selecionar...</option>
+          <option value="Prático">🧑‍🍳 Prático</option>
+          <option value="Demonstrativo">👁️ Demonstrativo</option>
+        </select>
+        <span class="err-msg">Selecione o tipo de curso</span>
+      </div>
+      <div class="form-group form-full" id="fg-fornecedor" style="display:none">
+        <label>Nome do fornecedor <span class="req">*</span></label>
+        <input type="text" id="f-fornecedor" placeholder="Ex: Callebaut, Harald, Barry Callebaut..." />
+        <span class="err-msg">Informe o nome do fornecedor</span>
+      </div>
       <div class="form-group form-full" id="fg-titulo"><label>Título do curso <span class="req">*</span></label><input type="text" id="f-titulo" placeholder="Ex: Trufas Belgas com Ganache de Maracujá" /><span class="err-msg">Informe o título</span></div>
       <div class="form-group form-full" id="fg-desc">
         <label>Descrição — o que os alunos vão aprender <span class="req">*</span></label>
@@ -623,11 +636,26 @@ window.updateDescCount = function(){
   if(len>=500) document.getElementById('fg-desc').classList.remove('field-err');
 }
 
+function checkFornecedor(){
+  const cat = document.getElementById('f-cat').value;
+  const fg = document.getElementById('fg-fornecedor');
+  const inp = document.getElementById('f-fornecedor');
+  if(cat === 'Fornecedor'){
+    fg.style.display = 'block';
+  } else {
+    fg.style.display = 'none';
+    inp.value = '';
+    fg.classList.remove('field-err');
+  }
+}
+
 function validate(){
   const checks=[
     {id:'fg-nome', ok:()=>document.getElementById('f-nome').value.trim()},
     {id:'fg-email',ok:()=>/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(document.getElementById('f-email').value)},
     {id:'fg-cat',  ok:()=>document.getElementById('f-cat').value},
+    {id:'fg-tipo', ok:()=>document.getElementById('f-tipo').value},
+    {id:'fg-fornecedor', ok:()=>document.getElementById('f-cat').value!=='Fornecedor'||document.getElementById('f-fornecedor').value.trim()},
     {id:'fg-valor',ok:()=>document.getElementById('f-valor').value&&parseFloat(document.getElementById('f-valor').value)>0},
     {id:'fg-titulo',ok:()=>document.getElementById('f-titulo').value.trim()},
     {id:'fg-desc', ok:()=>document.getElementById('f-desc').value.trim().length>=500},
@@ -702,6 +730,8 @@ window.submitForm = async function(){
       nome:document.getElementById('f-nome').value.trim(),
       email:document.getElementById('f-email').value.trim(),
       categoria:document.getElementById('f-cat').value,
+      tipo_curso:document.getElementById('f-tipo').value,
+      nome_fornecedor:document.getElementById('f-cat').value==='Fornecedor'?document.getElementById('f-fornecedor').value.trim():'',
       titulo:document.getElementById('f-titulo').value.trim(),
       descricao:document.getElementById('f-desc').value.trim(),
       valor:parseFloat(document.getElementById('f-valor').value),
@@ -735,6 +765,8 @@ window.submitForm = async function(){
       <div class="sd-row"><span>Duração</span><span>${dl[booking.duracao]}</span></div>
       <div class="sd-row"><span>Curso</span><span>${booking.titulo}</span></div>
       <div class="sd-row"><span>Categoria</span><span>${booking.categoria}</span></div>
+      <div class="sd-row"><span>Tipo</span><span>${booking.tipo_curso}</span></div>
+      ${booking.nome_fornecedor?`<div class="sd-row"><span>Fornecedor</span><span>${booking.nome_fornecedor}</span></div>`:''}
       <div class="sd-row"><span>Valor</span><span>R$ ${booking.valor.toFixed(2)}</span></div>
       <div class="sd-row"><span>Fotos</span><span>${photoUrls.length} foto(s) enviada(s)</span></div>
       <div class="sd-row"><span>Status</span><span style="color:var(--caramel)">Aguardando aprovação</span></div>
@@ -751,6 +783,8 @@ window.resetAll = function(){
   document.getElementById('btn-dur').disabled=true;
   ['f-nome','f-email','f-titulo','f-desc'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('f-cat').value=''; document.getElementById('f-valor').value='';
+  document.getElementById('f-tipo').value=''; document.getElementById('f-fornecedor').value='';
+  document.getElementById('fg-fornecedor').style.display='none';
   document.getElementById('f-foto').value='';
   validPhotos.forEach(p=>URL.revokeObjectURL(p.url)); validPhotos=[];
   document.getElementById('photo-grid').innerHTML='';

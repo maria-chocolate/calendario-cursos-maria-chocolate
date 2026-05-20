@@ -556,7 +556,11 @@ function renderList(){
       <div><div class="curso-title">${b.titulo}</div><div class="curso-instrutor">${b.nome}</div><div style="font-size:11px;color:var(--text-muted)">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : ''}</div></div>
       <div style="font-size:13px">${dateText}</div>
       <div style="font-size:12px;color:var(--text-muted)">${durLabel(b.duracao)}<br>${b.horaInicio}h–${b.horaFim}h</div>
-      <div><span class="cat-badge ${catClass(b.categoria)}">${b.categoria}</span></div>
+      <div>
+        <span class="cat-badge ${catClass(b.categoria)}">${b.categoria}</span>
+        ${b.tipo_curso?`<span style="font-size:10px;color:var(--text-muted);display:block;margin-top:2px">${b.tipo_curso}</span>`:''}
+        ${b.nome_fornecedor?`<span style="font-size:10px;color:var(--text-muted);display:block">${b.nome_fornecedor}</span>`:''}
+      </div>
       <div style="font-size:13px;font-weight:500">R$ ${b.valor.toFixed(2)}</div>
       <div class="actions">
         ${b.status==='pendente'
@@ -595,6 +599,8 @@ window.showDetail = function(id){
     <div class="detail-row"><div class="detail-key">Data</div><div class="detail-val">${dateText}</div></div>
     <div class="detail-row"><div class="detail-key">Duração</div><div class="detail-val">${durLabel(b.duracao)} · ${b.horaInicio}h às ${b.horaFim}h</div></div>
     <div class="detail-row"><div class="detail-key">Categoria</div><div class="detail-val">${b.categoria}</div></div>
+    <div class="detail-row"><div class="detail-key">Tipo de curso</div><div class="detail-val">${b.tipo_curso||'—'}</div></div>
+    ${b.nome_fornecedor?`<div class="detail-row"><div class="detail-key">Fornecedor</div><div class="detail-val">${b.nome_fornecedor}</div></div>`:''}
     <div class="detail-row"><div class="detail-key">Valor</div><div class="detail-val">R$ ${b.valor.toFixed(2)}</div></div>
     <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></div></div>
     <div class="detail-row"><div class="detail-key">Solicitado em</div><div class="detail-val">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : '—'}</div></div>
@@ -816,7 +822,7 @@ window.exportMonth = function(){
 
   // Build CSV with BOM for Excel UTF-8 support
   const BOM = '﻿';
-  const headers = ['Data','Dia da Semana','Horário Início','Horário Fim','Período','Instrutor','E-mail','Título do Curso','Categoria','Valor (R$)','Status'];
+  const headers = ['Data','Dia da Semana','Horário Início','Horário Fim','Período','Instrutor','E-mail','Título do Curso','Categoria','Tipo','Fornecedor','Valor (R$)','Status'];
   const WD_FULL = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'];
   const durLabel = {manha:'Manhã',tarde:'Tarde',dia:'Dia inteiro','2dias':'2 dias inteiros'};
 
@@ -835,6 +841,8 @@ window.exportMonth = function(){
       b.email||'',
       b.titulo||'',
       b.categoria||'',
+      b.tipo_curso||'',
+      b.nome_fornecedor||'',
       val,
       'Aprovado'
     ].map(v => '"'+String(v).replace(/"/g,'""')+'"').join(';');
