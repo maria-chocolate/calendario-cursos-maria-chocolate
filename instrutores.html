@@ -304,8 +304,8 @@ const db  = getFirestore(app);
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const WD = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const DUR_CONFIG = {
-  manha:   { ini:'09:00', fim:'12:30' },
-  tarde:   { ini:'13:30', fim:'17:00' },
+  manha:   { ini:'09:00', fim:'12:30', iniForn:'09:00', fimForn:'11:30' },
+  tarde:   { ini:'13:30', fim:'17:00', iniForn:'13:30', fimForn:'16:00' },
   dia:     { ini:'09:00', fim:'17:00' },
   '2dias': { ini:'09:00', fim:'17:00' },
 };
@@ -510,8 +510,8 @@ function renderDurCards(ds){
   const wd=getWeekday(ds);
   const wdName=WD[wd];
   const periods=[
-    {id:'manha', icon:'🌅', title:'Somente manhã',    desc:'Das <strong>09h às 12h30</strong>',        rule:'Seg a Sáb'},
-    {id:'tarde', icon:'🌆', title:'Somente tarde',    desc:'Das <strong>13h30 às 17h</strong>',         rule:'Seg a Sex'},
+    {id:'manha', icon:'🌅', title:'Somente manhã',    desc:'Das <strong>09h às 12h30</strong><br><span style="font-size:11px;color:var(--text-muted)">ou 09h às 11h30 (fornecedor)</span>',  rule:'Seg a Sáb'},
+    {id:'tarde', icon:'🌆', title:'Somente tarde',    desc:'Das <strong>13h30 às 17h</strong><br><span style="font-size:11px;color:var(--text-muted)">ou 13h30 às 16h (fornecedor)</span>',   rule:'Seg a Sex'},
     {id:'dia',   icon:'☀️', title:'Dia inteiro',       desc:'Das <strong>09h às 17h</strong>',           rule:'Seg a Sex'},
     {id:'2dias', icon:'📅', title:'2 dias inteiros',  desc:`Das <strong>09h às 17h</strong> — 2 dias consecutivos<br>Reserva: <strong>${fmtShort(ds)}</strong> e <strong>${fmtShort(addDays(ds,1))}</strong>`,  rule:'1º dia: Seg a Qui'},
   ];
@@ -570,7 +570,11 @@ function buildSelText(){
   // Used in date bar on form step
   if(dur==='2dias'&&selDates.length===2)
     return fmtLong(selDates[0])+' e '+fmtLong(selDates[1]);
-  const horarios={manha:'09h às 12h30',tarde:'13h30 às 17h',dia:'09h às 17h'};
+  const horarios={
+    manha:'09h às 12h30 ou 09h às 11h30 (fornecedor)',
+    tarde:'13h30 às 17h ou 13h30 às 16h (fornecedor)',
+    dia:'09h às 17h'
+  };
   return fmtLong(selDates[0])+' · '+horarios[dur];
 }
 
@@ -580,6 +584,16 @@ function buildSelTextFull(){
   if(dur==='2dias'&&selDates.length===2)
     return fmtLong(selDates[0])+' e '+fmtLong(selDates[1])+' · '+dl[dur];
   return fmtLong(selDates[0])+' · '+dl[dur];
+}
+
+function getEffectiveTimes(){
+  const cat = document.getElementById('f-cat') ? document.getElementById('f-cat').value : '';
+  const cfg = DUR_CONFIG[dur];
+  if(!cfg) return {ini:tIni, fim:tFim};
+  const isFornecedor = cat === 'Fornecedor';
+  const ini = isFornecedor && cfg.iniForn ? cfg.iniForn : cfg.ini;
+  const fim = isFornecedor && cfg.fimForn ? cfg.fimForn : cfg.fim;
+  return {ini, fim};
 }
 
 function goToForm(){ document.getElementById('form-date-text').textContent=buildSelText(); setStep(3); show('view-form'); }
@@ -726,7 +740,7 @@ window.submitForm = async function(){
     const dl={manha:'Somente manhã',tarde:'Somente tarde',dia:'Dia inteiro','2dias':'2 dias inteiros'};
     const booking={
       data:selDates[0], data2:selDates[1]||null,
-      duracao:dur, horaInicio:tIni, horaFim:tFim,
+      duracao:dur, horaInicio:getEffectiveTimes().ini, horaFim:getEffectiveTimes().fim,
       nome:document.getElementById('f-nome').value.trim(),
       email:document.getElementById('f-email').value.trim(),
       categoria:document.getElementById('f-cat').value,
