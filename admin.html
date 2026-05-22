@@ -822,7 +822,7 @@ window.exportMonth = function(){
 
   // Build CSV with BOM for Excel UTF-8 support
   const BOM = '﻿';
-  const headers = ['Data','Dia','Horário','Instrutor','Título do Curso','Categoria','Tipo','Fornecedor','Valor (R$)'];
+  const headers = ['Data','Dia','Horário','Instrutor','Título do Curso','Categoria','Tipo','Fornecedor','Valor'];
   const WD_ABR = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 
   const rows = data.map(b => {
@@ -830,7 +830,7 @@ window.exportMonth = function(){
     const wd = WD_ABR[new Date(by,bm-1,bd).getDay()];
     const dateStr = String(bd).padStart(2,'0')+'/'+String(bm).padStart(2,'0')+'/'+String(by).slice(-2);
     const horario = (b.horaInicio||'') + ' às ' + (b.horaFim||'');
-    const val = typeof b.valor === 'number' ? b.valor.toFixed(2).replace('.',',') : '';
+    const val = typeof b.valor === 'number' ? 'R$ '+b.valor.toFixed(2).replace('.',',') : '';
     return [
       dateStr,
       wd,
