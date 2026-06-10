@@ -770,11 +770,14 @@ window.addReleasedDate = async function(){
   const reasonEl=document.getElementById('release-reason');
   const ds=dateEl.value;
   if(!ds){ dateEl.focus(); return; }
-  // Validate: date must be within the 20-day window
+  // Validate date
   const today=new Date(); today.setHours(0,0,0,0);
   const minDate=new Date(today); minDate.setDate(minDate.getDate()+20);
-  const chosen=new Date(ds);
-  if(chosen>=minDate){ alert('Esta data já está disponível normalmente (fora do prazo de 20 dias).'); return; }
+  const[cy,cm,cd]=ds.split('-').map(Number);
+  const chosen=new Date(cy,cm-1,cd);
+  const isMonday = chosen.getDay()===1;
+  // Allow Mondays to be released regardless of 20-day rule (morning exception)
+  if(!isMonday && chosen>=minDate){ alert('Esta data já está disponível normalmente (fora do prazo de 20 dias).'); return; }
   if(chosen<today){ alert('Não é possível liberar datas no passado.'); return; }
   if(releasedDates.find(b=>b.date===ds)){ alert('Esta data já está liberada.'); return; }
   const[y,m,d]=ds.split('-');
