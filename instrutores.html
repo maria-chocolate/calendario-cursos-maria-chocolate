@@ -416,12 +416,12 @@ function getDayStatus(ds){
 function isPeriodAllowed(ds, period){
   const wd=getWeekday(ds);
   if(wd===0) return false; // domingo nunca
-  // Monday: only afternoon allowed (morning reserved for lives)
-  // Therefore full day and 2-day courses cannot start on Monday
-  if(period==='manha')  return wd>=2&&wd<=6; // ter-sab
-  if(period==='tarde')  return wd>=1&&wd<=5; // seg-sex
-  if(period==='dia')    return wd>=2&&wd<=5; // ter-sex (seg bloqueada pois manhã indisponível)
-  if(period==='2dias')  return wd>=2&&wd<=4; // ter-qui (seg bloqueada pois manhã indisponível)
+  // Check if Monday is explicitly released — unlocks morning, full day and 2-day
+  const isMondayReleased = wd===1 && getReleasedDates().some(r=>r.date===ds);
+  if(period==='manha')  return wd>=2&&wd<=6 || isMondayReleased;
+  if(period==='tarde')  return wd>=1&&wd<=5;
+  if(period==='dia')    return wd>=2&&wd<=5 || isMondayReleased;
+  if(period==='2dias')  return wd>=2&&wd<=4 || isMondayReleased;
   return false;
 }
 
@@ -474,10 +474,11 @@ function renderCal(){
     let availHtml='';
     const isSaturday = getWeekday(ds) === 6;
     const isMonday   = getWeekday(ds) === 1;
+    const isMondayReleased = isMonday && getReleasedDates().some(r=>r.date===ds);
     if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
       availHtml='<div class="day-avail">';
-      // Never show "manhã" on Mondays — morning reserved for lives
-      availHtml+=(!amBooked && !isMonday)?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      // Show manhã on Mondays only if explicitly released
+      availHtml+=(!amBooked && (!isMonday || isMondayReleased))?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
       // Never show "tarde" on Saturdays — afternoon not available
       availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
