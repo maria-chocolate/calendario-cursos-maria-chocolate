@@ -690,21 +690,29 @@ window.submitForm = async function(){
     const freshSnap = await getDocs(collection(db,'agendamentos'));
     const freshBookings = freshSnap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.status!=='reprovado');
 
-    // Check if selected dates are still available
+    // Helper: check if a period conflicts with an existing booking on a date
+    function hasConflict(ds, period){
+      const onDay = freshBookings.filter(b => b.data===ds || (b.data2&&b.data2===ds));
+      for(const b of onDay){
+        const bd = b.duracao;
+        // Any existing full-day or 2-day blocks everything
+        if(bd==='dia'||bd==='2dias') return true;
+        // New full-day or 2-day blocked by any existing booking
+        if(period==='dia'||period==='2dias') return true;
+        // Same period conflicts
+        if(bd==='manha' && period==='manha') return true;
+        if(bd==='tarde' && period==='tarde') return true;
+      }
+      return false;
+    }
+
     const datesToCheck = dur==='2dias' ? [selDates[0], selDates[1]] : [selDates[0]];
     for(const ds of datesToCheck){
-      const conflicts = freshBookings.filter(b => b.data===ds || (b.data2&&b.data2===ds));
-      for(const conflict of conflicts){
-        if(conflict.duracao==='dia'||conflict.duracao==='2dias'||
-          (conflict.duracao===dur)||(dur==='dia'&&(conflict.duracao==='manha'||conflict.duracao==='tarde'))){
-          hideLoading();
-          alert('⚠️ Ops! Esta data acabou de ser reservada por outro instrutor enquanto você preenchia o formulário.\n\nPor favor volte ao calendário e escolha outra data disponível.');
-          goBackToCal();
-          return;
-        }
-        // Check period conflicts
-        if(dur==='manha' && conflict.duracao==='manha') { hideLoading(); alert('⚠️ O período da manhã nesta data acabou de ser reservado.\n\nEscolha outra data ou período.'); goBackToCal(); return; }
-        if(dur==='tarde' && conflict.duracao==='tarde') { hideLoading(); alert('⚠️ O período da tarde nesta data acabou de ser reservado.\n\nEscolha outra data ou período.'); goBackToCal(); return; }
+      if(hasConflict(ds, dur)){
+        hideLoading();
+        alert('⚠️ Ops! Esta data/período acabou de ser reservado por outro instrutor enquanto você preenchia o formulário.\n\nPor favor volte ao calendário e escolha outra data disponível.');
+        goBackToCal();
+        return;
       }
     }
     // Update local bookings with fresh data
