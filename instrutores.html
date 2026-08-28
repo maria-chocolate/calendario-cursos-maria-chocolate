@@ -386,6 +386,15 @@ async function uploadPhoto(file, attempt=1){
 // ── HELPERS ───────────────────────────────────────────────────────────
 function toDS(y,m,d){ return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function addDays(ds,n){ const[y,m,d]=ds.split('-').map(Number); const dt=new Date(y,m-1,d+n); return toDS(dt.getFullYear(),dt.getMonth()+1,dt.getDate()); }
+
+// Max allowed booking date: last day of the month AFTER the current month.
+// Auto-unlocks on the 1st of every month.
+function getMaxAllowedDate(){
+  const today = new Date();
+  // Last day of (current month + 2) at day 0 = last day of (current month + 1)
+  const maxDate = new Date(today.getFullYear(), today.getMonth()+2, 0);
+  return toDS(maxDate.getFullYear(), maxDate.getMonth()+1, maxDate.getDate());
+}
 function fmtShort(ds){ const[y,m,d]=ds.split('-'); return `${d}/${m}/${y}`; }
 function fmtLong(ds){ const[y,m,d]=ds.split('-').map(Number); const dt=new Date(y,m-1,d); return `${WD[dt.getDay()]}, ${d} de ${MONTHS_PT[m-1]} de ${y}`; }
 function getWeekday(ds){ const[y,m,d]=ds.split('-').map(Number); return new Date(y,m-1,d).getDay(); }
@@ -426,6 +435,7 @@ function isPeriodAllowed(ds, period){
 }
 
 function canBookPeriod(ds, period){
+  if(ds > getMaxAllowedDate()) return false;
   if(!isPeriodAllowed(ds, period)) return false;
   const{am,pm,full}=getDayOccupancy(ds);
   if(full) return false;
@@ -456,12 +466,13 @@ function renderCal(){
     const ds=toDS(y,m+1,d);
     const isReleased=getReleasedDates().some(r=>r.date===ds);
     const isPast=new Date(y,m,d)<minDate && !isReleased;
-    const clickable=!isPast&&isDayClickable(ds);
+    const isFutureLocked=ds > getMaxAllowedDate() && !isReleased;
+    const clickable=!isPast&&!isFutureLocked&&isDayClickable(ds);
     const{am,pm,full}=getDayOccupancy(ds);
     const{hasPending,hasApproved,amBooked,pmBooked,fullBooked}=getDayStatus(ds);
     const isAdminBlocked=getBlockedDates().some(b=>b.date===ds);
     let cls='cal-day';
-    if(isPast) cls+=' past';
+    if(isPast || isFutureLocked) cls+=' past';
     else if(isAdminBlocked) cls+=' admin-blocked';
     else if(!clickable) cls+=' blocked-day';
     else if(full||(am&&pm)) cls+=' blocked-day';
