@@ -698,8 +698,32 @@ window.submitForm = async function(){
   // Real-time conflict check — query Firestore fresh before saving
   setLoadingText('Verificando disponibilidade...');
   try {
-    const freshSnap = await getDocs(collection(db,'agendamentos'));
+    // Reload bookings AND admin-blocked/released dates
+    const [freshSnap, freshBlockedSnap, freshReleasedSnap] = await Promise.all([
+      getDocs(collection(db,'agendamentos')),
+      getDocs(collection(db,'datas_bloqueadas')),
+      getDocs(collection(db,'datas_liberadas'))
+    ]);
     const freshBookings = freshSnap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.status!=='reprovado');
+    const freshBlocked  = freshBlockedSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const freshReleased = freshReleasedSnap.docs.map(d=>({id:d.id,...d.data()}));
+
+    const datesToCheck = dur==='2dias' ? [selDates[0], selDates[1]] : [selDates[0]];
+
+    // 1) Check if admin blocked any of the selected dates while the form was open
+    for(const ds of datesToCheck){
+      const blockedEntry = freshBlocked.find(b => b.date === ds);
+      if(blockedEntry){
+        hideLoading();
+        const motivo = blockedEntry.reason ? '\n\nMotivo: ' + blockedEntry.reason : '';
+        alert('⚠️ Esta data foi bloqueada pela administração e não está mais disponível para agendamento.' + motivo + '\n\nPor favor volte ao calendário e escolha outra data disponível.');
+        blockedDates  = freshBlocked;
+        releasedDates = freshReleased;
+        allBookings   = freshBookings;
+        goBackToCal();
+        return;
+      }
+    }
 
     // Helper: check if a period conflicts with an existing booking on a date
     function hasConflict(ds, period){
@@ -717,17 +741,23 @@ window.submitForm = async function(){
       return false;
     }
 
-    const datesToCheck = dur==='2dias' ? [selDates[0], selDates[1]] : [selDates[0]];
+    // 2) Check booking conflicts with other instructors
     for(const ds of datesToCheck){
       if(hasConflict(ds, dur)){
         hideLoading();
         alert('⚠️ Ops! Esta data/período acabou de ser reservado por outro instrutor enquanto você preenchia o formulário.\n\nPor favor volte ao calendário e escolha outra data disponível.');
+        blockedDates  = freshBlocked;
+        releasedDates = freshReleased;
+        allBookings   = freshBookings;
         goBackToCal();
         return;
       }
     }
-    // Update local bookings with fresh data
-    allBookings = freshBookings;
+
+    // Update local state with fresh data
+    allBookings   = freshBookings;
+    blockedDates  = freshBlocked;
+    releasedDates = freshReleased;
   } catch(e){ console.warn('Erro na verificação em tempo real:', e); }
 
   // Check monthly limit: max 5 courses per instructor per month
