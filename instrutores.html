@@ -328,6 +328,21 @@ let allBookings=[];
 // ── FIRESTORE ──────────────────────────────────────────────────────────
 let blockedDates=[];
 function getBlockedDates(){ return blockedDates; }
+
+// Which periods of a date are blocked by the admin.
+// Entries saved before the "periodo" field existed count as full-day blocks.
+function getBlockedPeriods(ds, list){
+  const src = list || blockedDates;
+  let am=false, pm=false;
+  for(const b of src){
+    if(b.date!==ds) continue;
+    const p = b.periodo || 'dia';
+    if(p==='dia'){ am=true; pm=true; }
+    else if(p==='manha') am=true;
+    else if(p==='tarde') pm=true;
+  }
+  return { am, pm, full: am&&pm, any: am||pm };
+}
 let releasedDates=[];
 function getReleasedDates(){ return releasedDates; }
 
@@ -437,17 +452,21 @@ function isPeriodAllowed(ds, period){
 function canBookPeriod(ds, period){
   if(ds > getMaxAllowedDate()) return false;
   if(!isPeriodAllowed(ds, period)) return false;
+  const blk=getBlockedPeriods(ds);
+  if(blk.full) return false;
   const{am,pm,full}=getDayOccupancy(ds);
   if(full) return false;
-  if(period==='dia'||period==='2dias') return !am&&!pm;
-  if(period==='manha') return !am;
-  if(period==='tarde') return !pm;
+  // A shift blocked by the admin is as unavailable as one already booked
+  const amTaken = am || blk.am;
+  const pmTaken = pm || blk.pm;
+  if(period==='dia'||period==='2dias') return !amTaken&&!pmTaken;
+  if(period==='manha') return !amTaken;
+  if(period==='tarde') return !pmTaken;
   return true;
 }
 
-// A day is clickable if it has at least one available period and is not admin-blocked
+// A day is clickable if it still has at least one bookable period
 function isDayClickable(ds){
-  if(getBlockedDates().some(b=>b.date===ds)) return false;
   if(['manha','tarde','dia','2dias'].some(p=>canBookPeriod(ds,p))) return true;
   return false;
 }
@@ -470,12 +489,17 @@ function renderCal(){
     const clickable=!isPast&&!isFutureLocked&&isDayClickable(ds);
     const{am,pm,full}=getDayOccupancy(ds);
     const{hasPending,hasApproved,amBooked,pmBooked,fullBooked}=getDayStatus(ds);
-    const isAdminBlocked=getBlockedDates().some(b=>b.date===ds);
+    const blk=getBlockedPeriods(ds);
+    const isAdminBlocked=blk.full;   // only a whole-day block paints the day red
+    // Merge bookings with admin blocks: a blocked shift is as unavailable as a booked one
+    const amTaken   = amBooked   || blk.am;
+    const pmTaken   = pmBooked   || blk.pm;
+    const fullTaken = fullBooked || blk.full;
     let cls='cal-day';
     if(isPast || isFutureLocked) cls+=' past';
     else if(isAdminBlocked) cls+=' admin-blocked';
     else if(!clickable) cls+=' blocked-day';
-    else if(full||(am&&pm)) cls+=' blocked-day';
+    else if(fullTaken||(amTaken&&pmTaken)) cls+=' blocked-day';
     // Simple color: any pending = orange, all confirmed = green
     if(!isPast && !isAdminBlocked){
       if(hasPending)       cls+=' has-pending';
@@ -486,16 +510,16 @@ function renderCal(){
     const isSaturday = getWeekday(ds) === 6;
     const isMonday   = getWeekday(ds) === 1;
     const isMondayReleased = isMonday && getReleasedDates().some(r=>r.date===ds);
-    if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
+    if(!isPast && !isAdminBlocked && (amTaken||pmTaken) && !fullTaken && !(amTaken&&pmTaken)){
       availHtml='<div class="day-avail">';
       // Show manhã on Mondays only if explicitly released
-      availHtml+=(!amBooked && (!isMonday || isMondayReleased))?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      availHtml+=(!amTaken && (!isMonday || isMondayReleased))?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
       // Never show "tarde" on Saturdays — afternoon not available
-      availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
+      availHtml+=(!pmTaken && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
     }
     let tags='';
-    const blockedEntry=getBlockedDates().find(b=>b.date===ds);
+    const blockedEntry=isAdminBlocked?getBlockedDates().find(b=>b.date===ds):null;
     const onclick=clickable?`onclick="selectDay('${ds}')"`:'' ;
     const title=blockedEntry?(blockedEntry.reason||'Data bloqueada'):'';
     html+=`<div class="${cls}" ${onclick} ${title?`title="${title}"`:''}><div class="day-num">${d}</div>${availHtml}</div>`;
@@ -710,13 +734,29 @@ window.submitForm = async function(){
 
     const datesToCheck = dur==='2dias' ? [selDates[0], selDates[1]] : [selDates[0]];
 
-    // 1) Check if admin blocked any of the selected dates while the form was open
+    // 1) Check if the admin blocked the chosen period while the form was open
     for(const ds of datesToCheck){
-      const blockedEntry = freshBlocked.find(b => b.date === ds);
-      if(blockedEntry){
+      const blk = getBlockedPeriods(ds, freshBlocked);
+      const hitsChosenPeriod =
+        blk.full ||
+        (dur==='manha' && blk.am) ||
+        (dur==='tarde' && blk.pm) ||
+        ((dur==='dia'||dur==='2dias') && blk.any);
+      if(hitsChosenPeriod){
         hideLoading();
-        const motivo = blockedEntry.reason ? '\n\nMotivo: ' + blockedEntry.reason : '';
-        alert('⚠️ Esta data foi bloqueada pela administração e não está mais disponível para agendamento.' + motivo + '\n\nPor favor volte ao calendário e escolha outra data disponível.');
+        // Only mention the entries that actually collide with what was chosen
+        const relevant = freshBlocked.filter(b=>{
+          if(b.date!==ds) return false;
+          const p = b.periodo || 'dia';
+          if(p==='dia') return true;
+          if(dur==='dia'||dur==='2dias') return true;
+          return p===dur;
+        });
+        const motivos = relevant.map(b=>b.reason).filter(Boolean);
+        const motivo = motivos.length ? '\n\nMotivo: ' + motivos.join(' | ') : '';
+        const quais = blk.full ? 'Esta data foi bloqueada'
+                    : (blk.am ? 'A manhã desta data foi bloqueada' : 'A tarde desta data foi bloqueada');
+        alert('⚠️ ' + quais + ' pela administração e não está mais disponível para agendamento.' + motivo + '\n\nPor favor volte ao calendário e escolha outra data ou período disponível.');
         blockedDates  = freshBlocked;
         releasedDates = freshReleased;
         allBookings   = freshBookings;

@@ -139,6 +139,9 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
 .admin-cal-wrap .cal-day.has-pending{background:#FFF3E0;border:1.5px solid #FFB74D;}
 .admin-cal-wrap .cal-day.has-approved{background:#E8F5E9;border:1.5px solid #81C784;}
 .admin-cal-wrap .cal-day.has-pending.has-approved{background:#FFF3E0;border:1.5px solid #FFB74D;}
+/* Partial admin block: keeps the booking colour but flags the block with a red border.
+   Class repeated to outrank the combined .has-pending.has-approved border rule above. */
+.admin-cal-wrap .cal-day.partial-blocked.partial-blocked{border:1.5px solid #EF9A9A;}
 .admin-cal-wrap .day-num{font-size:13px;line-height:1;color:var(--text);}
 .admin-cal-wrap .cal-day.past .day-num{color:var(--text-muted);}
 .admin-cal-wrap .day-avail{width:100%;display:flex;flex-direction:column;gap:1px;margin-top:2px;}
@@ -264,11 +267,19 @@ header{background:#5C3317;padding:1.25rem 2rem;display:flex;align-items:center;j
   <!-- BLOCKED DATES PANEL -->
   <div class="block-panel">
     <div class="block-title">Bloquear datas</div>
-    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Adicione datas indisponíveis para agendamento (feriados, eventos, etc.)</p>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:1rem">Adicione datas indisponíveis para agendamento (feriados, eventos, etc.). É possível bloquear o dia inteiro ou apenas um turno.</p>
     <div class="block-form">
       <div>
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Data</div>
         <input type="date" class="block-input" id="block-date" />
+      </div>
+      <div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Período</div>
+        <select class="block-input" id="block-periodo" style="cursor:pointer">
+          <option value="dia">Dia inteiro</option>
+          <option value="manha">Somente manhã</option>
+          <option value="tarde">Somente tarde</option>
+        </select>
       </div>
       <div style="flex:1;min-width:200px">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:4px">Motivo (opcional)</div>
@@ -658,33 +669,42 @@ function renderAdminCal(){
   for(let d=1;d<=days;d++){
     const ds=toDS(y,m+1,d);
     const isPast=new Date(y,m,d)<today;
-    const isAdminBlocked=getBlockedDates().some(b=>b.date===ds);
+    const blk=getBlockedPeriods(ds);
+    const isAdminBlocked=blk.full;            // whole day blocked → red, as before
+    const isPartialBlocked=blk.any&&!blk.full; // one shift blocked only
     const{am,pm,full}=getAdminDayOccupancy(ds);
     const{hasPending,hasApproved,amBooked,pmBooked,fullBooked}=getAdminDayStatus(ds);
+    // Merge bookings with admin blocks: a blocked shift is as unavailable as a booked one
+    const amTaken   = amBooked   || blk.am;
+    const pmTaken   = pmBooked   || blk.pm;
+    const fullTaken = fullBooked || blk.full;
     let cls='cal-day';
     if(isPast) cls+=' past';
     else if(isAdminBlocked) cls+=' admin-blocked';
-    else if(full||(am&&pm)) cls+=' blocked-day';
+    else if(fullTaken||(amTaken&&pmTaken)) cls+=' blocked-day';
     // status colors
     if(!isPast && !isAdminBlocked){
       if(hasPending)       cls+=' has-pending';
       else if(hasApproved) cls+=' has-approved';
+      if(isPartialBlocked) cls+=' partial-blocked';
     }
     // availability labels
     const isSaturday = new Date(y,m,d).getDay() === 6;
     const isMonday   = new Date(y,m,d).getDay() === 1;
     const isMondayReleased = isMonday && getReleasedDates().some(r=>r.date===ds);
     let availHtml='';
-    if(!isPast && !isAdminBlocked && (amBooked||pmBooked) && !fullBooked && !(amBooked&&pmBooked)){
+    if(!isPast && !isAdminBlocked && (amTaken||pmTaken) && !fullTaken && !(amTaken&&pmTaken)){
       availHtml='<div class="day-avail">';
       // Show manhã on Mondays only if explicitly released
-      availHtml+=(!amBooked && (!isMonday || isMondayReleased))?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
+      availHtml+=(!amTaken && (!isMonday || isMondayReleased))?'<div class="avail-label avail-manha">manhã</div>':'<div style="height:12px"></div>';
       // Never show "tarde" on Saturdays — afternoon not available
-      availHtml+=(!pmBooked && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
+      availHtml+=(!pmTaken && !isSaturday)?'<div class="avail-label avail-tarde">tarde</div>':'';
       availHtml+='</div>';
     }
-    const blockedEntry=getBlockedDates().find(b=>b.date===ds);
-    const title=blockedEntry?(blockedEntry.reason||'Data bloqueada'):'';
+    const blockedEntries=getBlockedDates().filter(b=>b.date===ds);
+    const title=blockedEntries.length
+      ? blockedEntries.map(b=>'Bloqueado ('+PERIODO_LABEL[b.periodo||'dia']+')'+(b.reason?': '+b.reason:'')).join(' | ')
+      : '';
     html+=`<div class="${cls}" ${title?`title="${title}"`:''}><div class="day-num">${d}</div>${availHtml}</div>`;
   }
   grid.innerHTML=html;
@@ -728,18 +748,41 @@ window.downloadAllPhotos = async function(fotos){
 // ── BLOCKED DATES (Firestore) ──────────────────────────────────────────
 function getBlockedDates(){ return blockedDates; }
 
+// Which periods of a date are blocked by the admin.
+// Entries saved before the "periodo" field existed count as full-day blocks.
+function getBlockedPeriods(ds, list){
+  const src = list || blockedDates;
+  let am=false, pm=false;
+  for(const b of src){
+    if(b.date!==ds) continue;
+    const p = b.periodo || 'dia';
+    if(p==='dia'){ am=true; pm=true; }
+    else if(p==='manha') am=true;
+    else if(p==='tarde') pm=true;
+  }
+  return { am, pm, full: am&&pm, any: am||pm };
+}
+
+const PERIODO_LABEL = { dia:'dia inteiro', manha:'manhã', tarde:'tarde' };
+
 window.addBlockedDate = async function(){
   const dateEl=document.getElementById('block-date');
+  const periodoEl=document.getElementById('block-periodo');
   const reasonEl=document.getElementById('block-reason');
   const ds=dateEl.value;
+  const periodo=periodoEl.value||'dia';
   if(!ds){ dateEl.focus(); return; }
-  if(blockedDates.find(b=>b.date===ds)){ alert('Esta data já está bloqueada.'); return; }
+  // Reject if this period (or the whole day) is already blocked
+  const already=getBlockedPeriods(ds);
+  if(already.full || (periodo==='dia'&&already.any) || (periodo==='manha'&&already.am) || (periodo==='tarde'&&already.pm)){
+    alert('Esta data já está bloqueada neste período.'); return;
+  }
   const[y,m,d]=ds.split('-');
-  const entry={date:ds, reason:reasonEl.value.trim(), label:d+'/'+m+'/'+y};
+  const entry={date:ds, periodo, reason:reasonEl.value.trim(), label:d+'/'+m+'/'+y};
   try {
     const docRef=await addDoc(collection(db,'datas_bloqueadas'), entry);
     blockedDates.push({id:docRef.id,...entry});
-    dateEl.value=''; reasonEl.value='';
+    dateEl.value=''; reasonEl.value=''; periodoEl.value='dia';
     renderBlockedList(); renderAdminCal();
   } catch(e){ alert('Erro ao bloquear data: '+e.message); }
 }
@@ -757,7 +800,7 @@ function renderBlockedList(){
   const el=document.getElementById('blocked-list');
   if(!sorted.length){ el.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Nenhuma data bloqueada.</span>'; return; }
   el.innerHTML=sorted.map(b=>
-    `<div class="blocked-tag">🚫 ${b.label}${b.reason?' — '+b.reason:''} <button onclick="removeBlockedDate('${b.id}')" title="Remover bloqueio">✕</button></div>`
+    `<div class="blocked-tag">🚫 ${b.label} · ${PERIODO_LABEL[b.periodo||'dia']}${b.reason?' — '+b.reason:''} <button onclick="removeBlockedDate('${b.id}')" title="Remover bloqueio">✕</button></div>`
   ).join('');
 }
 
