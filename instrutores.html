@@ -284,7 +284,7 @@ textarea{resize:vertical;min-height:120px;}
 <!-- FIREBASE -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
+import { getFirestore, collection, doc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/12.12.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDh1zpRlewDqMnhYlG0SejCXYQLCEwrV8M",
@@ -297,6 +297,14 @@ const firebaseConfig = {
 
 const CLOUDINARY_CLOUD = 'dsy28szjx';
 const CLOUDINARY_PRESET = 'maria_chocolate_unsigned';
+
+// Identificador anônimo do e-mail (SHA-256). Usado só para o limite de 5 cursos por mês,
+// sem expor o e-mail do instrutor no calendário público.
+async function emailHash(e){
+  const d=new TextEncoder().encode((e||'').trim().toLowerCase());
+  const h=await crypto.subtle.digest('SHA-256',d);
+  return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
 
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
@@ -349,7 +357,7 @@ function getReleasedDates(){ return releasedDates; }
 async function loadBookings(){
   try {
     const [snapA, snapB, snapC] = await Promise.all([
-      getDocs(collection(db,'agendamentos')),
+      getDocs(collection(db,'ocupacao')),
       getDocs(collection(db,'datas_bloqueadas')),
       getDocs(collection(db,'datas_liberadas'))
     ]);
@@ -722,7 +730,7 @@ function validate(){
 async function checkSlotStillAvailable(){
   // Reload bookings AND admin-blocked/released dates
   const [freshSnap, freshBlockedSnap, freshReleasedSnap] = await Promise.all([
-    getDocs(collection(db,'agendamentos')),
+    getDocs(collection(db,'ocupacao')),
     getDocs(collection(db,'datas_bloqueadas')),
     getDocs(collection(db,'datas_liberadas'))
   ]);
@@ -808,10 +816,11 @@ window.submitForm = async function(){
 
   // Check monthly limit: max 5 courses per instructor per month
   const instructorEmail = document.getElementById('f-email').value.trim().toLowerCase();
+  const instructorHash = await emailHash(instructorEmail);
   const [bookYear, bookMonth] = selDates[0].split('-');
   const monthKey = bookYear + '-' + bookMonth;
   const monthlyCount = allBookings.filter(b =>
-    b.email && b.email.toLowerCase() === instructorEmail &&
+    b.emailHash && b.emailHash === instructorHash &&
     b.status !== 'reprovado' &&
     b.data && b.data.startsWith(monthKey)
   ).length;
@@ -861,9 +870,14 @@ window.submitForm = async function(){
       status:'pendente',
       criadoEm:new Date().toISOString(),
     };
-    const docRef=await addDoc(collection(db,'agendamentos'),booking);
+    const docRef=doc(collection(db,'agendamentos'));
+    const ocupacao={ data:booking.data, data2:booking.data2, duracao:booking.duracao, status:'pendente', emailHash:instructorHash };
+    const batch=writeBatch(db);
+    batch.set(docRef, booking);
+    batch.set(doc(db,'ocupacao',docRef.id), ocupacao);
+    await batch.commit();
     booking.id=docRef.id;
-    allBookings.push(booking);
+    allBookings.push({id:docRef.id, ...ocupacao});
 
     // Send notification email to admin
     setLoadingText('Enviando notificação...');
