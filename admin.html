@@ -419,7 +419,7 @@ window.loadData = async function(){
       getDocs(collection(db,'datas_bloqueadas')),
       getDocs(collection(db,'datas_liberadas'))
     ]);
-    allBookings   = snapA.docs.map(d=>({id:d.id,...d.data()}));
+    allBookings   = snapA.docs.map(d=>normalizar({id:d.id,...d.data()}));
     blockedDates  = snapB.docs.map(d=>({id:d.id,...d.data()}));
     releasedDates = snapC.docs.map(d=>({id:d.id,...d.data()}));
     renderList(); renderAdminCal(); renderBlockedList(); renderReleasedList(); populateMonthFilter();
@@ -551,8 +551,39 @@ window.cancelApproval = async function(id){
   } catch(e){ alert('Erro ao cancelar: '+e.message); }
 }
 
+// ── SEGURANÇA ──────────────────────────────────────────────────────────
+// O formulário dos instrutores é público. Tudo que vem do banco é tratado antes
+// de entrar na tela, para que um texto nunca seja interpretado como código.
+function esc(v){
+  return String(v==null?'':v).replace(/[&<>"'`]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c]));
+}
+function num(v){ const n=Number(v); return Number.isFinite(n)?n:0; }
+// Só aceita link http ou https (bloqueia javascript:, data: e similares). O endereço é mantido como foi gravado.
+function urlSegura(u){
+  try { const x=new URL(String(u)); return (x.protocol==='https:'||x.protocol==='http:') ? String(u) : ''; } catch(e){ return ''; }
+}
+function statusSeguro(s){ return ['pendente','aprovado','reprovado'].includes(s) ? s : 'pendente'; }
+// Evita que o Excel interprete um texto do formulário como fórmula
+function csvSeguro(v){ const t=String(v); return /^[=+\-@\t\r]/.test(t) ? "'"+t : t; }
+const RE_DATA=/^\d{4}-\d{2}-\d{2}$/;
+// Garante o tipo esperado de cada campo de um agendamento lido do banco
+function normalizar(b){
+  const t=v=>(v==null?'':String(v));
+  return {
+    ...b,
+    data:  (typeof b.data==='string'  && RE_DATA.test(b.data))  ? b.data  : '',
+    data2: (typeof b.data2==='string' && RE_DATA.test(b.data2)) ? b.data2 : null,
+    duracao:t(b.duracao), horaInicio:t(b.horaInicio), horaFim:t(b.horaFim),
+    nome:t(b.nome), email:t(b.email), categoria:t(b.categoria), tipo_curso:t(b.tipo_curso),
+    nome_fornecedor:t(b.nome_fornecedor), titulo:t(b.titulo), descricao:t(b.descricao),
+    valor:num(b.valor), status:t(b.status)||'pendente',
+    fotos:(Array.isArray(b.fotos)?b.fotos:[]).map(urlSegura).filter(Boolean),
+    motivo_reprovacao:t(b.motivo_reprovacao), data_reprovacao:t(b.data_reprovacao),
+  };
+}
+
 // ── RENDER ─────────────────────────────────────────────────────────────
-function catClass(cat){ return {Chocolateria:'cat-choc',Confeitaria:'cat-conf',Salgados:'cat-salg',Fornecedor:'cat-forn'}[cat]||'cat-choc'; }
+function catClass(cat){ const m={Chocolateria:'cat-choc',Confeitaria:'cat-conf',Salgados:'cat-salg',Fornecedor:'cat-forn'}; return Object.prototype.hasOwnProperty.call(m,cat) ? m[cat] : 'cat-choc'; }
 function fmtDate(ds){ if(!ds) return '—'; const[y,m,d]=ds.split('-'); return `${d}/${m}/${y}`; }
 function fmtLong(ds){ if(!ds) return '—'; const[y,m,d]=ds.split('-'); const dt=new Date(y,m-1,d); return `${WD[dt.getDay()]}, ${d} de ${MONTHS_PT[m-1]} de ${y}`; }
 function durLabel(d){ return {manha:'Somente manhã',tarde:'Somente tarde',dia:'Dia inteiro','2dias':'2 dias inteiros'}[d]||d; }
@@ -584,7 +615,7 @@ function populateMonthFilter(){
   months.forEach(ym=>{
     const[y,m]=ym.split('-');
     const label=MONTHS_PT[parseInt(m)-1]+' '+y;
-    sel.innerHTML+=`<option value="${ym}" ${ym===cur?'selected':''}>${label}</option>`;
+    sel.innerHTML+=`<option value="${esc(ym)}" ${ym===cur?'selected':''}>${esc(label)}</option>`;
   });
 }
 
@@ -605,23 +636,23 @@ function renderList(){
   container.innerHTML=filtered.map(b=>{
     let dateText=fmtDate(b.data); if(b.data2) dateText+=' – '+fmtDate(b.data2);
     return `<div class="booking-row">
-      <div><div class="curso-title">${b.titulo}</div><div class="curso-instrutor">${b.nome}</div><div style="font-size:11px;color:var(--text-muted)">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : ''}</div></div>
-      <div style="font-size:13px">${dateText}</div>
-      <div style="font-size:12px;color:var(--text-muted)">${durLabel(b.duracao)}<br>${b.horaInicio}h–${b.horaFim}h</div>
+      <div><div class="curso-title">${esc(b.titulo)}</div><div class="curso-instrutor">${esc(b.nome)}</div><div style="font-size:11px;color:var(--text-muted)">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : ''}</div></div>
+      <div style="font-size:13px">${esc(dateText)}</div>
+      <div style="font-size:12px;color:var(--text-muted)">${esc(durLabel(b.duracao))}<br>${esc(b.horaInicio)}h–${esc(b.horaFim)}h</div>
       <div>
-        <span class="cat-badge ${catClass(b.categoria)}">${b.categoria}</span>
-        ${b.tipo_curso?`<span style="font-size:10px;color:var(--text-muted);display:block;margin-top:2px">${b.tipo_curso}</span>`:''}
-        ${b.nome_fornecedor?`<span style="font-size:10px;color:var(--text-muted);display:block">${b.nome_fornecedor}</span>`:''}
+        <span class="cat-badge ${catClass(b.categoria)}">${esc(b.categoria)}</span>
+        ${b.tipo_curso?`<span style="font-size:10px;color:var(--text-muted);display:block;margin-top:2px">${esc(b.tipo_curso)}</span>`:''}
+        ${b.nome_fornecedor?`<span style="font-size:10px;color:var(--text-muted);display:block">${esc(b.nome_fornecedor)}</span>`:''}
       </div>
       <div style="font-size:13px;font-weight:500">R$ ${b.valor.toFixed(2)}</div>
       <div class="actions">
         ${b.status==='pendente'
-          ? `<button class="act-btn act-approve" onclick="updateStatus('${b.id}','aprovado')">Aprovar</button><button class="act-btn act-reject" onclick="updateStatus('${b.id}','reprovado',false)">Reprovar</button>`
+          ? `<button class="act-btn act-approve" data-id="${esc(b.id)}" onclick="updateStatus(this.dataset.id,'aprovado')">Aprovar</button><button class="act-btn act-reject" data-id="${esc(b.id)}" onclick="updateStatus(this.dataset.id,'reprovado',false)">Reprovar</button>`
           : b.status==='aprovado'
-            ? `<span class="status-badge st-aprovado">Aprovado</span><button class="act-btn act-cancel" onclick="cancelApproval('${b.id}')" title="Cancelar aprovação e liberar data">Cancelar</button>`
+            ? `<span class="status-badge st-aprovado">Aprovado</span><button class="act-btn act-cancel" data-id="${esc(b.id)}" onclick="cancelApproval(this.dataset.id)" title="Cancelar aprovação e liberar data">Cancelar</button>`
             : `<span class="status-badge st-reprovado">Reprovado</span>`
         }
-        <button class="act-btn act-detail" onclick="showDetail('${b.id}')">Ver</button>
+        <button class="act-btn act-detail" data-id="${esc(b.id)}" onclick="showDetail(this.dataset.id)">Ver</button>
       </div>
     </div>`;
   }).join('');
@@ -631,40 +662,41 @@ window.showDetail = function(id){
   const b=allBookings.find(x=>x.id===id); if(!b) return;
   let dateText=fmtLong(b.data); if(b.data2) dateText+=' e '+fmtLong(b.data2);
   const fotos=b.fotos||[];
+  window._fotosModal=fotos;
   const photosHtml=fotos.length?`
     <div class="photo-gallery">
       ${fotos.map((url,i)=>`
         <div class="photo-item">
-          <img src="${url}" loading="lazy"/>
+          <img src="${esc(url)}" loading="lazy"/>
           <div class="photo-item-btns">
-            <a href="${url}" target="_blank" class="ph-btn ph-btn-view">👁 Ver</a>
-            <button class="ph-btn ph-btn-dl" onclick="downloadPhoto('${url}',${i+1})">⬇ Baixar</button>
+            <a href="${esc(url)}" target="_blank" rel="noopener noreferrer" class="ph-btn ph-btn-view">👁 Ver</a>
+            <button class="ph-btn ph-btn-dl" data-url="${esc(url)}" onclick="downloadPhoto(this.dataset.url,${i+1})">⬇ Baixar</button>
           </div>
         </div>`).join('')}
     </div>
-    <button class="dl-all-btn" onclick="downloadAllPhotos(${JSON.stringify(fotos).replace(/"/g,'&quot;')})">⬇ Baixar todas as fotos (${fotos.length})</button>
+    <button class="dl-all-btn" onclick="downloadAllPhotos(window._fotosModal)">⬇ Baixar todas as fotos (${fotos.length})</button>
   `:'<span style="color:var(--text-muted);font-size:13px">Nenhuma foto enviada</span>';
   document.getElementById('modal-body').innerHTML=`
-    <div class="modal-title">${b.titulo}</div>
-    <div class="detail-row"><div class="detail-key">Instrutor</div><div class="detail-val">${b.nome}</div></div>
-    <div class="detail-row"><div class="detail-key">E-mail</div><div class="detail-val">${b.email}</div></div>
-    <div class="detail-row"><div class="detail-key">Data</div><div class="detail-val">${dateText}</div></div>
-    <div class="detail-row"><div class="detail-key">Duração</div><div class="detail-val">${durLabel(b.duracao)} · ${b.horaInicio}h às ${b.horaFim}h</div></div>
-    <div class="detail-row"><div class="detail-key">Categoria</div><div class="detail-val">${b.categoria}</div></div>
-    <div class="detail-row"><div class="detail-key">Tipo de curso</div><div class="detail-val">${b.tipo_curso||'—'}</div></div>
-    ${b.nome_fornecedor?`<div class="detail-row"><div class="detail-key">Fornecedor</div><div class="detail-val">${b.nome_fornecedor}</div></div>`:''}
+    <div class="modal-title">${esc(b.titulo)}</div>
+    <div class="detail-row"><div class="detail-key">Instrutor</div><div class="detail-val">${esc(b.nome)}</div></div>
+    <div class="detail-row"><div class="detail-key">E-mail</div><div class="detail-val">${esc(b.email)}</div></div>
+    <div class="detail-row"><div class="detail-key">Data</div><div class="detail-val">${esc(dateText)}</div></div>
+    <div class="detail-row"><div class="detail-key">Duração</div><div class="detail-val">${esc(durLabel(b.duracao))} · ${esc(b.horaInicio)}h às ${esc(b.horaFim)}h</div></div>
+    <div class="detail-row"><div class="detail-key">Categoria</div><div class="detail-val">${esc(b.categoria)}</div></div>
+    <div class="detail-row"><div class="detail-key">Tipo de curso</div><div class="detail-val">${esc(b.tipo_curso||'—')}</div></div>
+    ${b.nome_fornecedor?`<div class="detail-row"><div class="detail-key">Fornecedor</div><div class="detail-val">${esc(b.nome_fornecedor)}</div></div>`:''}
     <div class="detail-row"><div class="detail-key">Valor</div><div class="detail-val">R$ ${b.valor.toFixed(2)}</div></div>
-    <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${b.status}">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span></div></div>
+    <div class="detail-row"><div class="detail-key">Status</div><div class="detail-val"><span class="status-badge st-${statusSeguro(b.status)}">${esc(b.status.charAt(0).toUpperCase()+b.status.slice(1))}</span></div></div>
     <div class="detail-row"><div class="detail-key">Solicitado em</div><div class="detail-val">${b.criadoEm ? new Date(b.criadoEm).toLocaleString('pt-BR') : '—'}</div></div>
-    <div class="detail-row"><div class="detail-key">Descrição</div><div class="detail-val" style="white-space:pre-wrap">${b.descricao}</div></div>
-    ${(b.status==='reprovado') ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao||'<em style="color:var(--text-muted)">Não informado</em>'}<br><span style="font-size:11px;color:var(--text-muted)">${b.data_reprovacao||''}</span></div></div>` : ''}
+    <div class="detail-row"><div class="detail-key">Descrição</div><div class="detail-val" style="white-space:pre-wrap">${esc(b.descricao)}</div></div>
+    ${(b.status==='reprovado') ? `<div class="detail-row"><div class="detail-key" style="color:var(--red)">Motivo reprovação</div><div class="detail-val" style="color:var(--red)">${b.motivo_reprovacao?esc(b.motivo_reprovacao):'<em style="color:var(--text-muted)">Não informado</em>'}<br><span style="font-size:11px;color:var(--text-muted)">${esc(b.data_reprovacao||'')}</span></div></div>` : ''}
     <div class="detail-row"><div class="detail-key">Fotos (${fotos.length})</div><div class="detail-val">${photosHtml}</div></div>
     <div class="modal-actions">
       ${b.status==='pendente'
-        ? `<button class="act-btn act-approve" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','aprovado').then(()=>closeModal())">Aprovar</button>
-           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" onclick="updateStatus('${b.id}','reprovado',true)">Reprovar</button>`
+        ? `<button class="act-btn act-approve" style="padding:8px 18px;font-size:13px" data-id="${esc(b.id)}" onclick="updateStatus(this.dataset.id,'aprovado').then(()=>closeModal())">Aprovar</button>
+           <button class="act-btn act-reject" style="padding:8px 18px;font-size:13px" data-id="${esc(b.id)}" onclick="updateStatus(this.dataset.id,'reprovado',true)">Reprovar</button>`
         : b.status==='aprovado'
-          ? `<button class="act-btn act-cancel" style="padding:8px 18px;font-size:13px" onclick="cancelApproval('${b.id}');closeModal()">Cancelar aprovação e liberar data</button>`
+          ? `<button class="act-btn act-cancel" style="padding:8px 18px;font-size:13px" data-id="${esc(b.id)}" onclick="cancelApproval(this.dataset.id);closeModal()">Cancelar aprovação e liberar data</button>`
           : ''
       }
       <button class="modal-close" onclick="closeModal()">Fechar</button>
@@ -746,7 +778,7 @@ function renderAdminCal(){
     const title=blockedEntries.length
       ? blockedEntries.map(b=>'Bloqueado ('+PERIODO_LABEL[b.periodo||'dia']+')'+(b.reason?': '+b.reason:'')).join(' | ')
       : '';
-    html+=`<div class="${cls}" ${title?`title="${title}"`:''}><div class="day-num">${d}</div>${availHtml}</div>`;
+    html+=`<div class="${cls}" ${title?`title="${esc(title)}"`:''}><div class="day-num">${d}</div>${availHtml}</div>`;
   }
   grid.innerHTML=html;
   // events list below calendar
@@ -755,11 +787,11 @@ function renderAdminCal(){
   const monthEvs=active.filter(b=>{ const[by,bm]=b.data.split('-'); return parseInt(by)===y&&parseInt(bm)-1===m; }).sort((a,b)=>(a.data||'').localeCompare(b.data||'')||(a.horaInicio||'').localeCompare(b.horaInicio||''));
   evsList.innerHTML=monthEvs.map(b=>`
     <div class="mini-event">
-      <div class="me-time">${b.horaInicio}h</div>
-      <div style="font-size:11px;color:var(--text-muted);min-width:52px">${fmtDate(b.data)}${b.data2?' – '+fmtDate(b.data2):''}</div>
-      <div class="me-name">${b.titulo} <span style="color:var(--text-muted);font-size:12px">· ${b.nome}</span></div>
-      <span class="cat-badge ${catClass(b.categoria)}" style="font-size:10px">${b.categoria}</span>
-      <span class="status-badge st-${b.status}" style="font-size:10px;padding:2px 8px">${b.status.charAt(0).toUpperCase()+b.status.slice(1)}</span>
+      <div class="me-time">${esc(b.horaInicio)}h</div>
+      <div style="font-size:11px;color:var(--text-muted);min-width:52px">${esc(fmtDate(b.data))}${b.data2?' – '+esc(fmtDate(b.data2)):''}</div>
+      <div class="me-name">${esc(b.titulo)} <span style="color:var(--text-muted);font-size:12px">· ${esc(b.nome)}</span></div>
+      <span class="cat-badge ${catClass(b.categoria)}" style="font-size:10px">${esc(b.categoria)}</span>
+      <span class="status-badge st-${statusSeguro(b.status)}" style="font-size:10px;padding:2px 8px">${esc(b.status.charAt(0).toUpperCase()+b.status.slice(1))}</span>
     </div>`).join('');
 }
 
@@ -841,7 +873,7 @@ function renderBlockedList(){
   const el=document.getElementById('blocked-list');
   if(!sorted.length){ el.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Nenhuma data bloqueada.</span>'; return; }
   el.innerHTML=sorted.map(b=>
-    `<div class="blocked-tag">🚫 ${b.label} · ${PERIODO_LABEL[b.periodo||'dia']}${b.reason?' — '+b.reason:''} <button onclick="removeBlockedDate('${b.id}')" title="Remover bloqueio">✕</button></div>`
+    `<div class="blocked-tag">🚫 ${esc(b.label)} · ${esc(PERIODO_LABEL[b.periodo||'dia'])}${b.reason?' — '+esc(b.reason):''} <button data-id="${esc(b.id)}" onclick="removeBlockedDate(this.dataset.id)" title="Remover bloqueio">✕</button></div>`
   ).join('');
 }
 
@@ -887,7 +919,7 @@ function renderReleasedList(){
   const el=document.getElementById('released-list');
   if(!sorted.length){ el.innerHTML='<span style="font-size:13px;color:var(--text-muted)">Nenhuma data liberada antecipadamente.</span>'; return; }
   el.innerHTML=sorted.map(b=>
-    `<div class="release-tag">✅ ${b.label}${b.reason?' — '+b.reason:''} <button onclick="removeReleasedDate('${b.id}')" title="Remover liberação">✕</button></div>`
+    `<div class="release-tag">✅ ${esc(b.label)}${b.reason?' — '+esc(b.reason):''} <button data-id="${esc(b.id)}" onclick="removeReleasedDate(this.dataset.id)" title="Remover liberação">✕</button></div>`
   ).join('');
 }
 
@@ -929,7 +961,7 @@ window.exportMonth = function(){
       b.tipo_curso||'',
       b.nome_fornecedor||'',
       val
-    ].map(v => '"'+String(v).replace(/"/g,'""')+'"').join(';');
+    ].map(v => '"'+csvSeguro(v).replace(/"/g,'""')+'"').join(';');
   });
 
   // Add summary row
